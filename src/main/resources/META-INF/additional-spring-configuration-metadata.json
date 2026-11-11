@@ -1,0 +1,24 @@
+{
+  "properties": [
+    {
+      "name": "jwt.secret",
+      "type": "java.lang.String",
+      "description": "Secret key used to sign JWT tokens. It must have at least 32 characters."
+    },
+    {
+      "name": "jwt.expiration-days",
+      "type": "java.lang.Integer",
+      "description": "Number of days a JWT token stays valid."
+    },
+    {
+      "name": "iam.default-password",
+      "type": "java.lang.String",
+      "description": "Password given to demo users and to team members created without a password."
+    },
+    {
+      "name": "cors.allowed-origins",
+      "type": "java.lang.String",
+      "description": "Comma separated list of frontend origins allowed to call the API."
+    }
+  ]
+}
