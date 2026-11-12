@@ -7,16 +7,15 @@ import java.util.List;
 import java.util.Objects;
 
 public abstract class AbstractDomainAggregateRoot {
-
-    private final List<DomainEvent> events = new ArrayList<>();
+    private final List<DomainEvent> pendingEvents = new ArrayList<>();
 
     protected final void registerEvent(DomainEvent event) {
-        events.add(Objects.requireNonNull(event));
+        pendingEvents.add(Objects.requireNonNull(event));
     }
 
     public final List<DomainEvent> pullDomainEvents() {
-        List<DomainEvent> copy = List.copyOf(events);
-        events.clear();
+        var copy = List.copyOf(pendingEvents);
+        pendingEvents.clear();
         return copy;
     }
 }

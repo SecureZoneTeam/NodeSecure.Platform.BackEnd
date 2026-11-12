@@ -6,44 +6,51 @@ import org.hibernate.engine.jdbc.env.spi.JdbcEnvironment;
 
 import static io.github.encryptorcode.pluralize.Pluralize.pluralize;
 
+
 public class SnakeCasePhysicalNamingStrategy implements PhysicalNamingStrategy {
 
     @Override
-    public Identifier toPhysicalCatalogName(Identifier name, JdbcEnvironment environment) {
-        return toSnakeCase(name);
+    public Identifier toPhysicalCatalogName(Identifier identifier, JdbcEnvironment jdbcEnvironment) {
+        return this.toSnakeCase(identifier);
     }
 
     @Override
-    public Identifier toPhysicalSchemaName(Identifier name, JdbcEnvironment environment) {
-        return toSnakeCase(name);
+    public Identifier toPhysicalSchemaName(Identifier identifier, JdbcEnvironment jdbcEnvironment) {
+        return this.toSnakeCase(identifier);
     }
+
 
     @Override
-    public Identifier toPhysicalTableName(Identifier name, JdbcEnvironment environment) {
-        return toSnakeCase(toPlural(name));
+    public Identifier toPhysicalTableName(Identifier identifier, JdbcEnvironment jdbcEnvironment) {
+        return this.toSnakeCase(this.toPlural(identifier));
     }
+
 
     @Override
-    public Identifier toPhysicalSequenceName(Identifier name, JdbcEnvironment environment) {
-        return toSnakeCase(name);
+    public Identifier toPhysicalSequenceName(Identifier identifier, JdbcEnvironment jdbcEnvironment) {
+        return this.toSnakeCase(identifier);
     }
+
 
     @Override
-    public Identifier toPhysicalColumnName(Identifier name, JdbcEnvironment environment) {
-        return toSnakeCase(name);
+    public Identifier toPhysicalColumnName(Identifier identifier, JdbcEnvironment jdbcEnvironment) {
+        return this.toSnakeCase(identifier);
     }
 
-    private Identifier toSnakeCase(Identifier name) {
-        if (name == null) {
-            return null;
-        }
-        String snakeName = name.getText()
-                .replaceAll("([a-z])([A-Z])", "$1_$2")
+
+    private Identifier toSnakeCase(final Identifier identifier) {
+        if (identifier == null) return null;
+
+        final String regex = "([a-z])([A-Z])";
+        final String replacement = "$1_$2";
+        final String newName = identifier.getText()
+                .replaceAll(regex, replacement)
                 .toLowerCase();
-        return Identifier.toIdentifier(snakeName);
+        return Identifier.toIdentifier(newName);
     }
 
-    private Identifier toPlural(Identifier name) {
-        return Identifier.toIdentifier(pluralize(name.getText()));
+    private Identifier toPlural(final Identifier identifier) {
+        final String newName = pluralize(identifier.getText());
+        return Identifier.toIdentifier(newName);
     }
 }
