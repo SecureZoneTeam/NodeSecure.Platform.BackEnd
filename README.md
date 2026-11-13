@@ -20,10 +20,11 @@ API REST de **NodeSecure** (startup **SafeZone**): seguridad física con sensore
 2. Desde la terminal de VS Code, en la carpeta del proyecto:
 
     ```powershell
+    $env:SENSOR_API_KEY = "node-secure-local-device-key"
     .\mvnw spring-boot:run
     ```
 
-    En macOS o Linux usa `./mvnw spring-boot:run`. La base `node_secure` se crea sola.
+    En macOS o Linux define primero `export SENSOR_API_KEY="node-secure-local-device-key"` y ejecuta `./mvnw spring-boot:run`. La base `node_secure` se crea sola. La clave es solo de desarrollo; en producción utiliza un secreto diferente.
 
 3. Abre Swagger: <http://localhost:8080/swagger-ui.html>
 4. Inicia sesión en `POST /api/v1/authentication/sign-in` con un usuario de prueba, copia el `token` y pégalo en el botón **Authorize** de Swagger.
@@ -55,6 +56,8 @@ Pruebas unitarias:
 | `IAM_DEFAULT_PASSWORD` | `12345678` | Contraseña de usuarios de prueba y miembros creados sin contraseña |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:4200,https://securezoneteam.github.io` | Orígenes del frontend |
 | `PORT` | `8080` | Puerto del servidor |
+| `SENSOR_API_KEY` | Sin valor por defecto | Clave secreta requerida por `POST /api/v1/physical-events` |
+| `SENSOR_CONNECTION_TIMEOUT_SECONDS` | `120` | Umbral provisional sin eventos para marcar Offline; debe ajustarse al intervalo real de heartbeat del ESP32 |
 
 ## Estructura y responsables
 
@@ -115,6 +118,51 @@ Cada contexto sigue las mismas capas que `iam/`:
 | DELETE | `/api/v1/users/{id}` | ROLE_ADMINISTRATOR |
 
 Los errores se devuelven como `ProblemDetail` (RFC 9457) con el mensaje en inglés o español según el header `Accept-Language`.
+
+## Endpoints de Warehouse Management e IoT Integration
+
+Todos los recursos de gestión requieren un JWT Bearer emitido por `POST /api/v1/authentication/sign-in`. Los registros se aíslan por `companyId` obtenido de la sesión autenticada; el cliente no puede elegir otra empresa enviando un identificador en el body. Las lecturas de `ROLE_WAREHOUSE_KEEPER` se limitan al `warehouseId` de su sesión. El `SessionUser` actual no contiene una lista de zonas asignadas; el control exacto por zona requiere una ampliación coordinada del contexto IAM.
+
+| Método | Ruta | Descripción | Acceso |
+| --- | --- | --- | --- |
+| GET | `/api/v1/warehouses` | Listar almacenes de la empresa | ADMINISTRATOR, SECURITY_MANAGER, WAREHOUSE_KEEPER, AUDITOR |
+| GET | `/api/v1/warehouses/{id}` | Consultar un almacén | Roles de lectura |
+| POST | `/api/v1/warehouses` | Registrar un almacén | ADMINISTRATOR, SECURITY_MANAGER |
+| PUT | `/api/v1/warehouses/{id}` | Actualizar un almacén | ADMINISTRATOR, SECURITY_MANAGER |
+| DELETE | `/api/v1/warehouses/{id}` | Eliminar un almacén vacío | ADMINISTRATOR |
+| GET | `/api/v1/warehouse-zones` | Listar zonas de la empresa | Roles de lectura |
+| GET | `/api/v1/warehouse-zones/{id}` | Consultar una zona | Roles de lectura |
+| POST | `/api/v1/warehouse-zones` | Crear zona y configurar turno/riesgo | ADMINISTRATOR, SECURITY_MANAGER |
+| PUT | `/api/v1/warehouse-zones/{id}` | Actualizar zona y turno | ADMINISTRATOR, SECURITY_MANAGER |
+| DELETE | `/api/v1/warehouse-zones/{id}` | Eliminar zona | ADMINISTRATOR |
+| GET | `/api/v1/sensor-nodes` | Listar sensores y estado de conexión | Roles de lectura |
+| GET | `/api/v1/sensor-nodes/{id}` | Consultar un sensor | Roles de lectura |
+| POST | `/api/v1/sensor-nodes` | Registrar/vincular sensor por MAC y zona | ADMINISTRATOR, SECURITY_MANAGER |
+| PUT | `/api/v1/sensor-nodes/{id}` | Actualizar zona/MAC/modelo/tipo | ADMINISTRATOR, SECURITY_MANAGER |
+| DELETE | `/api/v1/sensor-nodes/{id}` | Eliminar sensor sin eventos físicos | ADMINISTRATOR |
+| POST | `/api/v1/physical-events` | Recibir payload de ESP32 y registrar evento | API Key de dispositivo |
+
+Las respuestas de almacenes, zonas y sensores mantienen los nombres de propiedades consumidos por el frontend Angular (`companyId`, `warehouseId`, `zoneId`, `macAddress`, `connectionStatus`, `lastPingAt`, etc.).
+
+### Payload de recepción IoT (TS09)
+
+`POST /api/v1/physical-events` requiere el header `X-Device-Api-Key`. El cuerpo acepta el contrato del frontend (`macAddress`, `eventType`, `occurredAt`) y los alias de payload (`mac`, `state`, `timestamp`). Ejemplo:
+
+```json
+{
+  "mac": "A4:CF:12:9B:1E:44",
+  "state": "DOOR_OPENED",
+  "timestamp": "2026-11-11T22:30:00Z"
+}
+```
+
+Los tipos aceptados son `DOOR_OPENED`, `DOOR_CLOSED` y `NODE_DISCONNECTED`. La MAC debe corresponder a un sensor registrado. La API deriva `sensorNodeId` y `zoneId` desde ese registro y almacena el evento con `reconciled=false`; el payload no puede asignar arbitrariamente una zona. Para conservar la identidad de la evidencia histórica, la MAC no puede modificarse una vez que el sensor tiene eventos registrados.
+
+La clave de dispositivo se configura mediante `SENSOR_API_KEY`. La API falla de forma segura cuando la variable no está definida; configura una clave local antes de iniciar el backend y una clave secreta propia en Render. No uses una clave compartida en el frontend: es exclusiva del dispositivo IoT y debe mantenerse fuera del repositorio.
+
+La comunicación entre los bounded contexts se realiza mediante fachadas ACL: `SensorContextFacade` permite a Warehouse Management comprobar que una zona no tenga sensores antes de eliminarla, mientras que `WarehouseContextFacade` permite a Sensor Integration validar la pertenencia de una zona a la empresa autenticada y consultar su configuración (riesgo y turno operativo).
+
+El estado del sensor comienza como `OFFLINE`. Cada evento normal recibido actualiza `lastPingAt` y lo marca `ONLINE`; `NODE_DISCONNECTED` lo marca `OFFLINE`. Al consultar los sensores, un último ping que supere `SENSOR_CONNECTION_TIMEOUT_SECONDS` (por defecto, 120 segundos) también se marca `OFFLINE`.
 
 ## Despliegue
 
