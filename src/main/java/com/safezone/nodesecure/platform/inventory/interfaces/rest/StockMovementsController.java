@@ -7,10 +7,10 @@ import com.safezone.nodesecure.platform.inventory.application.queryservices.Stoc
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.resources.RegisterStockMovementResource;
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.resources.StockMovementResource;
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.transform.InventoryValueObjectMapper;
+import com.safezone.nodesecure.platform.inventory.interfaces.rest.transform.InventoryProblemResponseMapper;
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.transform.RegisterStockMovementCommandMapper;
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.transform.StockMovementCommandHttpResponseMapper;
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.transform.StockMovementResourceMapper;
-import com.safezone.nodesecure.platform.shared.interfaces.rest.transform.ProblemResponseMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -113,7 +113,7 @@ public class StockMovementsController {
         log.debug("GET /api/v1/stock-movements/{}", id);
         var movement = stockMovementQueryService.handle(new GetStockMovementByIdQuery(id));
         if (movement.isEmpty()) {
-            return ProblemResponseMapper.notFound(messageSource, "stock.error.notFoundById", id);
+            return InventoryProblemResponseMapper.notFound(messageSource, "stock.error.notFoundById", id);
         }
         return ResponseEntity.ok(StockMovementResourceMapper.toResourceFromEntity(movement.get()));
     }

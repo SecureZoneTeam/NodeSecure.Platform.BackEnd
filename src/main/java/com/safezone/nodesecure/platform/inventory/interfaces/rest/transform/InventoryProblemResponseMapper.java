@@ -1,4 +1,4 @@
-package com.safezone.nodesecure.platform.shared.interfaces.rest.transform;
+package com.safezone.nodesecure.platform.inventory.interfaces.rest.transform;
 
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
@@ -7,8 +7,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
 
-public final class ProblemResponseMapper {
-    private ProblemResponseMapper() {
+public final class InventoryProblemResponseMapper {
+    private InventoryProblemResponseMapper() {
     }
 
 

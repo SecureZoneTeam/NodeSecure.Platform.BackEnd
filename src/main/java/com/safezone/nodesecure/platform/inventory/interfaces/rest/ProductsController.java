@@ -8,10 +8,10 @@ import com.safezone.nodesecure.platform.inventory.interfaces.rest.resources.Crea
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.resources.ProductResource;
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.resources.UpdateProductResource;
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.transform.CreateProductCommandMapper;
+import com.safezone.nodesecure.platform.inventory.interfaces.rest.transform.InventoryProblemResponseMapper;
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.transform.ProductCommandHttpResponseMapper;
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.transform.ProductResourceMapper;
 import com.safezone.nodesecure.platform.inventory.interfaces.rest.transform.UpdateProductCommandMapper;
-import com.safezone.nodesecure.platform.shared.interfaces.rest.transform.ProblemResponseMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -105,7 +105,7 @@ public class ProductsController {
         log.debug("GET /api/v1/products/{}", id);
         var product = productQueryService.handle(new GetProductByIdQuery(id));
         if (product.isEmpty()) {
-            return ProblemResponseMapper.notFound(messageSource, "product.error.notFoundById", id);
+            return InventoryProblemResponseMapper.notFound(messageSource, "product.error.notFoundById", id);
         }
         return ResponseEntity.ok(ProductResourceMapper.toResourceFromEntity(product.get()));
     }
