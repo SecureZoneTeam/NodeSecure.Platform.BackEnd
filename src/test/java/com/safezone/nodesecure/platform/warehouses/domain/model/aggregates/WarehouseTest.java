@@ -23,17 +23,19 @@ class WarehouseTest {
     }
 
     @Test void addsAndUpdatesOwnedZones() {
-        Warehouse warehouse = Warehouse.restore(1L, 10L, "Ate Warehouse", address, WarehouseStatus.ACTIVE,
-                List.of(), now, now);
         var shift = OperatingShift.from("08:00", "18:00");
-        var zone = warehouse.addZone("Storage", "ATE-01", ZoneRiskLevel.HIGH, shift, now);
-        assertEquals(1, warehouse.getZoneCount());
+        var existingZone = com.safezone.nodesecure.platform.warehouses.domain.model.entities.WarehouseZone.restore(
+                2L, 1L, "Existing", "ATE-01", ZoneRiskLevel.HIGH, shift);
+        Warehouse warehouse = Warehouse.restore(1L, 10L, "Ate Warehouse", address, WarehouseStatus.ACTIVE,
+                List.of(existingZone), now, now);
+        var zone = warehouse.addZone("Storage", "ATE-02", ZoneRiskLevel.HIGH, shift, now);
+        assertEquals(2, warehouse.getZoneCount());
         assertEquals(Long.valueOf(1L), zone.getWarehouseId());
         var zoneEvent = warehouse.pullDomainEvents().get(0);
         assertInstanceOf(com.safezone.nodesecure.platform.warehouses.domain.model.events.WarehouseZoneConfiguredEvent.class, zoneEvent);
-        assertEquals("ATE-01", ((com.safezone.nodesecure.platform.warehouses.domain.model.events.WarehouseZoneConfiguredEvent) zoneEvent).zoneCode());
+        assertEquals("ATE-02", ((com.safezone.nodesecure.platform.warehouses.domain.model.events.WarehouseZoneConfiguredEvent) zoneEvent).zoneCode());
         assertTrue(warehouse.hasZoneCode("ate-01", null));
-        assertFalse(warehouse.hasZoneCode("ATE-01", zone.getId()));
+        assertFalse(warehouse.hasZoneCode("ATE-01", existingZone.getId()));
     }
 
     @Test void requiresCompanyAndWarehouseName() {

@@ -96,7 +96,7 @@ public final class Warehouse extends AbstractDomainAggregateRoot {
     public boolean hasZoneCode(String code, Long excludedZoneId) {
         if (code == null) return false;
         return zones.stream().anyMatch(zone -> zone.getCode().equalsIgnoreCase(code.trim())
-                && !Objects.equals(zone.getId(), excludedZoneId));
+                && (excludedZoneId == null || !Objects.equals(zone.getId(), excludedZoneId)));
     }
 
     private static String validateName(String name) {
