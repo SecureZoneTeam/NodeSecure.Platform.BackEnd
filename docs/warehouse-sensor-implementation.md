@@ -1,6 +1,6 @@
 # Warehouse Management & Sensor Integration — Implementation Notes
 
-Owner: **Kelber Sandoval**  
+Owner: **Kelber Sandoval**
 Scope: **US01, US02, US04, US05, US19, TS09**
 
 ## Architecture applied
