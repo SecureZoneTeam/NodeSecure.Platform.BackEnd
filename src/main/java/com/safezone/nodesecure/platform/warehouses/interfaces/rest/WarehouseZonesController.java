@@ -20,13 +20,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/** Zones are part of the warehouse structure: reading follows the warehouse scope, changes are owner-only. */
 @RestController
 @RequestMapping(value = "/api/v1/warehouse-zones", produces = "application/json")
 @Tag(name = "Warehouse Zones", description = "Operating zones and authorized shifts")
 public class WarehouseZonesController {
-
-    private static final String READ_ROLES = "hasAnyRole('ADMINISTRATOR','SECURITY_MANAGER','WAREHOUSE_KEEPER','AUDITOR')";
-    private static final String MANAGE_ROLES = "hasAnyRole('ADMINISTRATOR','SECURITY_MANAGER')";
 
     private final WarehouseCommandService commandService;
     private final WarehouseQueryService queryService;
@@ -41,57 +39,46 @@ public class WarehouseZonesController {
         this.messages = messages;
     }
 
-    @Operation(summary = "Get all zones belonging to the authenticated company")
-    @PreAuthorize(READ_ROLES)
+    @Operation(summary = "List warehouse zones")
+    @PreAuthorize("hasAuthority('warehouses.view')")
     @GetMapping
     public ResponseEntity<List<WarehouseZoneResource>> getAll() {
-        Long warehouseScope = warehouseKeeperScope();
-        if (iamFacade.currentUserHasRole("ROLE_WAREHOUSE_KEEPER") && warehouseScope == null) {
-            return ResponseEntity.ok(List.of());
-        }
         List<WarehouseZoneResource> resources = queryService.handle(
-                        new GetAllWarehouseZonesQuery(iamFacade.currentCompanyId(), warehouseScope))
+                        new GetAllWarehouseZonesQuery(iamFacade.requireCompanyId(), iamFacade.warehouseScope()))
                 .stream().map(WarehouseResourceMapper::toZoneResource).toList();
         return ResponseEntity.ok(resources);
     }
 
-    @Operation(summary = "Get a zone by id")
-    @PreAuthorize(READ_ROLES)
+    @Operation(summary = "Get zone by id")
+    @PreAuthorize("hasAuthority('warehouses.view')")
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable Long id) {
-        Long warehouseScope = warehouseKeeperScope();
-        if (iamFacade.currentUserHasRole("ROLE_WAREHOUSE_KEEPER") && warehouseScope == null) {
-            return WarehouseHttpResponseMapper.notFound("warehouseZone", id, messages);
-        }
-        return queryService.handle(new GetWarehouseZoneByIdQuery(id, iamFacade.currentCompanyId(), warehouseScope))
+        return queryService.handle(new GetWarehouseZoneByIdQuery(id, iamFacade.requireCompanyId(), iamFacade.warehouseScope()))
                 .<ResponseEntity<?>>map(zone -> ResponseEntity.ok(WarehouseResourceMapper.toZoneResource(zone)))
                 .orElseGet(() -> WarehouseHttpResponseMapper.notFound("warehouseZone", id, messages));
     }
 
-    @Operation(summary = "Create a zone within one of the company's warehouses")
-    @PreAuthorize(MANAGE_ROLES)
+    @Operation(summary = "Create zone")
+    @PreAuthorize("hasAuthority('warehouses.update')")
     @PostMapping(consumes = "application/json")
     public ResponseEntity<?> create(@Valid @RequestBody CreateWarehouseZoneResource resource) {
-        var command = WarehouseCommandMapper.toCreateZoneCommand(resource, iamFacade.currentCompanyId());
+        var command = WarehouseCommandMapper.toCreateZoneCommand(resource, iamFacade.requireCompanyId());
         return WarehouseHttpResponseMapper.toZoneResponse(commandService.handle(command), HttpStatus.CREATED, messages);
     }
 
-    @Operation(summary = "Update a warehouse zone and its operating shift")
-    @PreAuthorize(MANAGE_ROLES)
+    @Operation(summary = "Update zone")
+    @PreAuthorize("hasAuthority('warehouses.update')")
     @PutMapping(value = "/{id}", consumes = "application/json")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody UpdateWarehouseZoneResource resource) {
-        var command = WarehouseCommandMapper.toUpdateZoneCommand(id, resource, iamFacade.currentCompanyId());
+        var command = WarehouseCommandMapper.toUpdateZoneCommand(id, resource, iamFacade.requireCompanyId());
         return WarehouseHttpResponseMapper.toZoneResponse(commandService.handle(command), HttpStatus.OK, messages);
     }
 
-    @Operation(summary = "Delete a warehouse zone")
-    @PreAuthorize("hasRole('ADMINISTRATOR')")
+    @Operation(summary = "Delete zone")
+    @PreAuthorize("hasAuthority('warehouses.update')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         return WarehouseHttpResponseMapper.toDeleteResponse(
-                commandService.handle(new DeleteWarehouseZoneCommand(iamFacade.currentCompanyId(), id)), messages);
-    }
-    private Long warehouseKeeperScope() {
-        return iamFacade.currentUserHasRole("ROLE_WAREHOUSE_KEEPER") ? iamFacade.currentWarehouseId() : null;
+                commandService.handle(new DeleteWarehouseZoneCommand(iamFacade.requireCompanyId(), id)), messages);
     }
 }

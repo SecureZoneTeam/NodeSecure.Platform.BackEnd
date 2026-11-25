@@ -40,8 +40,13 @@ public class SecurityAlertRepositoryAdapter implements SecurityAlertRepository {
     }
 
     @Override
-    public List<SecurityAlert> findAll(AlertStatus status, AlertSeverity severity, Long warehouseId) {
-        Specification<SecurityAlertJpaEntity> spec = (root, query, cb) -> cb.conjunction();
+    public List<SecurityAlert> findAll(AlertStatus status, AlertSeverity severity, Long warehouseId,
+                                       java.util.Collection<Long> allowedWarehouseIds) {
+        if (allowedWarehouseIds == null || allowedWarehouseIds.isEmpty()) {
+            return List.of();
+        }
+        Specification<SecurityAlertJpaEntity> spec = (root, query, cb) ->
+                root.get("warehouseId").in(allowedWarehouseIds);
         if (status != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status.name()));
         }

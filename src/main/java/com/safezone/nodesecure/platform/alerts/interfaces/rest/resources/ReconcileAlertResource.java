@@ -16,7 +16,6 @@ public record ReconcileAlertResource(
 
         @Schema(description = "Username of the person closing the alert", example = "lanahua", maxLength = 100,
                 requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotBlank(message = "{alert.error.resolvedBy.notBlank}")
         @Size(max = 100, message = "{alert.error.resolvedBy.size}")
         String resolvedBy) {
 }

@@ -1,221 +1,285 @@
 package com.safezone.nodesecure.platform.iam.application.internal.commandservices;
 
+import com.safezone.nodesecure.platform.iam.application.commands.ChangeUserStatusCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.CreateUserCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.DeleteUserCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.SignInCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.SignUpCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.UpdateUserCommand;
+import com.safezone.nodesecure.platform.iam.application.commands.UpdateUserPermissionsCommand;
 import com.safezone.nodesecure.platform.iam.application.commandservices.SignInResult;
 import com.safezone.nodesecure.platform.iam.application.commandservices.UserCommandFailure;
+import com.safezone.nodesecure.platform.iam.domain.model.aggregates.Organization;
 import com.safezone.nodesecure.platform.iam.domain.model.aggregates.User;
 import com.safezone.nodesecure.platform.iam.domain.model.events.UserRegisteredEvent;
 import com.safezone.nodesecure.platform.iam.domain.model.valueobjects.EmailAddress;
+import com.safezone.nodesecure.platform.iam.domain.model.valueobjects.Permission;
 import com.safezone.nodesecure.platform.iam.domain.model.valueobjects.Role;
-import com.safezone.nodesecure.platform.iam.domain.model.valueobjects.SessionUser;
+import com.safezone.nodesecure.platform.iam.domain.model.valueobjects.TokenClaims;
 import com.safezone.nodesecure.platform.iam.domain.model.valueobjects.Username;
+import com.safezone.nodesecure.platform.iam.domain.repositories.OrganizationRepository;
 import com.safezone.nodesecure.platform.iam.domain.repositories.UserRepository;
 import com.safezone.nodesecure.platform.iam.domain.services.PasswordHasher;
 import com.safezone.nodesecure.platform.iam.domain.services.TokenService;
 import com.safezone.nodesecure.platform.shared.application.result.Result;
+import com.safezone.nodesecure.platform.warehouses.interfaces.acl.WarehouseContextFacade;
+import com.safezone.nodesecure.platform.warehouses.interfaces.acl.WarehouseZoneConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class UserCommandServiceImplTest {
 
     private FakeUserRepository repository;
+    private FakeOrganizationRepository organizations;
     private List<Object> publishedEvents;
     private UserCommandServiceImpl service;
+    /** warehouseId -> companyId */
+    private final Map<Long, Long> warehouses = new HashMap<>();
 
     @BeforeEach
     void setUp() {
         repository = new FakeUserRepository();
+        organizations = new FakeOrganizationRepository();
         publishedEvents = new ArrayList<>();
+        warehouses.clear();
         Clock clock = Clock.fixed(Instant.parse("2026-11-11T10:00:00Z"), ZoneOffset.UTC);
-        service = new UserCommandServiceImpl(repository, new FakeHasher(), new FakeTokenService(),
-                publishedEvents::add, clock, "12345678");
+        service = new UserCommandServiceImpl(repository, organizations, new FakeHasher(), new FakeTokenService(),
+                new FakeWarehouseFacade(), publishedEvents::add, clock);
+    }
+
+    private SignInResult signUp(String username, String organizationName) {
+        return service.handle(new SignUpCommand(username, username + "@mail.pe", "secret123",
+                "Owner " + username, organizationName)).success().orElseThrow();
+    }
+
+    private User createWorker(SignInResult owner, String username, List<Long> warehouseIds) {
+        return service.handle(new CreateUserCommand(owner.user().getCompanyId(), owner.user().getId(), username,
+                username + "@mail.pe", "secret123", "Worker " + username, "ROLE_OPERATOR", warehouseIds))
+                .success().orElseThrow();
     }
 
     @Test
-    void signUpCreatesWarehouseKeeperAndPublishesEvent() {
-        Result<User, UserCommandFailure> result = service.handle(
-                new SignUpCommand("jquispe", "juan.quispe@andina.pe", "secret123", "Juan Quispe", 1L));
+    void signUpCreatesANewOrganizationWithItsOwner() {
+        SignInResult result = signUp("ownera", "Organización A");
 
-        User user = result.success().orElseThrow();
-        assertEquals(1L, user.getId());
-        assertTrue(user.hasRole(Role.ROLE_WAREHOUSE_KEEPER));
-        assertEquals("hashed:secret123", user.getPasswordHash());
-        assertEquals(1, publishedEvents.size());
-        assertTrue(publishedEvents.get(0) instanceof UserRegisteredEvent);
+        assertEquals("Organización A", result.organization().getName());
+        assertEquals(result.user().getId(), result.organization().getOwnerUserId());
+        assertEquals(result.organization().getId(), result.user().getCompanyId());
+        assertEquals(Role.ROLE_OWNER, result.user().getRole());
+        assertEquals("hashed:secret123", result.user().getPasswordHash());
+        assertEquals("token-for-ownera", result.token());
+        assertInstanceOf(UserRegisteredEvent.class, publishedEvents.get(0));
+    }
+
+    @Test
+    void everySignUpGetsItsOwnOrganization() {
+        SignInResult ownerA = signUp("ownera", "Organización A");
+        SignInResult ownerB = signUp("ownerb", "Organización B");
+
+        assertNotEquals(ownerA.user().getCompanyId(), ownerB.user().getCompanyId());
     }
 
     @Test
     void signUpRejectsRepeatedUsername() {
-        service.handle(new SignUpCommand("jquispe", "juan.quispe@andina.pe", "secret123", "Juan Quispe", 1L));
+        signUp("ownera", "Organización A");
 
-        Result<User, UserCommandFailure> result = service.handle(
-                new SignUpCommand("JQuispe", "otro@andina.pe", "secret123", "Juan Quispe", 1L));
+        Result<SignInResult, UserCommandFailure> result = service.handle(
+                new SignUpCommand("OwnerA", "otro@mail.pe", "secret123", "Owner", "Otra"));
 
-        assertTrue(result.failure().orElseThrow() instanceof UserCommandFailure.UsernameTaken);
+        assertInstanceOf(UserCommandFailure.UsernameTaken.class, result.failure().orElseThrow());
     }
 
     @Test
-    void signInReturnsTokenWithRightPassword() {
-        service.handle(new SignUpCommand("jquispe", "juan.quispe@andina.pe", "secret123", "Juan Quispe", 1L));
+    void signInChecksPasswordAndStatus() {
+        SignInResult owner = signUp("ownera", "Organización A");
+        warehouses.put(10L, owner.user().getCompanyId());
+        User worker = createWorker(owner, "pepito", List.of(10L));
 
-        Result<SignInResult, UserCommandFailure> result = service.handle(new SignInCommand("jquispe", "secret123"));
+        assertTrue(service.handle(new SignInCommand("pepito", "secret123")).isSuccess());
+        assertInstanceOf(UserCommandFailure.InvalidCredentials.class,
+                service.handle(new SignInCommand("pepito", "wrong-pass")).failure().orElseThrow());
 
-        assertEquals("token-for-jquispe", result.success().orElseThrow().token());
+        service.handle(new ChangeUserStatusCommand(owner.user().getCompanyId(), owner.user().getId(), worker.getId(), true));
+        assertInstanceOf(UserCommandFailure.AccountSuspended.class,
+                service.handle(new SignInCommand("pepito", "secret123")).failure().orElseThrow());
     }
 
     @Test
-    void signInFailsWithWrongPassword() {
-        service.handle(new SignUpCommand("jquispe", "juan.quispe@andina.pe", "secret123", "Juan Quispe", 1L));
+    void ownerCreatesActiveWorkerInItsOwnOrganization() {
+        SignInResult owner = signUp("ownera", "Organización A");
+        warehouses.put(10L, owner.user().getCompanyId());
 
-        Result<SignInResult, UserCommandFailure> result = service.handle(new SignInCommand("jquispe", "wrongpass"));
+        User worker = createWorker(owner, "pepito", List.of(10L));
 
-        assertTrue(result.failure().orElseThrow() instanceof UserCommandFailure.InvalidCredentials);
+        assertEquals(owner.user().getCompanyId(), worker.getCompanyId());
+        assertEquals(Set.of(10L), worker.getWarehouseIds());
+        assertTrue(worker.isActive());
+        assertEquals("hashed:secret123", worker.getPasswordHash());
     }
 
     @Test
-    void signInFailsWithUnknownOrInvalidUsername() {
-        assertTrue(service.handle(new SignInCommand("nobody", "secret123")).isFailure());
-        assertTrue(service.handle(new SignInCommand("a b", "secret123")).isFailure());
+    void workerCannotBeAssignedToAWarehouseOfAnotherOrganization() {
+        SignInResult ownerA = signUp("ownera", "Organización A");
+        SignInResult ownerB = signUp("ownerb", "Organización B");
+        warehouses.put(30L, ownerB.user().getCompanyId());
+
+        var result = service.handle(new CreateUserCommand(ownerA.user().getCompanyId(), ownerA.user().getId(),
+                "pepito", "pepito@mail.pe", "secret123", "Pepito", "ROLE_OPERATOR", List.of(30L)));
+
+        assertInstanceOf(UserCommandFailure.Validation.class, result.failure().orElseThrow());
     }
 
     @Test
-    void createUserUsesDefaultPasswordAndGivenRoles() {
-        Result<User, UserCommandFailure> result = service.handle(new CreateUserCommand(
-                "mrojas", "maria.rojas@andina.pe", null, "María Rojas", List.of("ROLE_AUDITOR"), 1L, 2L));
+    void ownerRoleCannotBeAssignedToAWorker() {
+        SignInResult owner = signUp("ownera", "Organización A");
+        warehouses.put(10L, owner.user().getCompanyId());
 
-        User user = result.success().orElseThrow();
-        assertEquals("hashed:12345678", user.getPasswordHash());
-        assertEquals(List.of("ROLE_AUDITOR"), user.getRoleNames());
-        assertEquals(2L, user.getWarehouseId());
+        var result = service.handle(new CreateUserCommand(owner.user().getCompanyId(), owner.user().getId(),
+                "pepito", "pepito@mail.pe", "secret123", "Pepito", "ROLE_OWNER", List.of(10L)));
+
+        assertInstanceOf(UserCommandFailure.Validation.class, result.failure().orElseThrow());
     }
 
     @Test
-    void updateUserChangesRolesAndRejectsTakenEmail() {
-        service.handle(new SignUpCommand("jquispe", "juan.quispe@andina.pe", "secret123", "Juan Quispe", 1L));
-        service.handle(new SignUpCommand("mrojas", "maria.rojas@andina.pe", "secret123", "María Rojas", 1L));
+    void usersOfAnotherOrganizationBehaveAsMissing() {
+        SignInResult ownerA = signUp("ownera", "Organización A");
+        SignInResult ownerB = signUp("ownerb", "Organización B");
+        warehouses.put(10L, ownerA.user().getCompanyId());
+        User pepito = createWorker(ownerA, "pepito", List.of(10L));
+        Long companyB = ownerB.user().getCompanyId();
+        Long actorB = ownerB.user().getId();
 
-        Result<User, UserCommandFailure> updated = service.handle(
-                new UpdateUserCommand(1L, null, null, List.of("ROLE_SECURITY_MANAGER"), 3L));
-        assertEquals(List.of("ROLE_SECURITY_MANAGER"), updated.success().orElseThrow().getRoleNames());
-
-        Result<User, UserCommandFailure> taken = service.handle(
-                new UpdateUserCommand(1L, "maria.rojas@andina.pe", null, null, null));
-        assertTrue(taken.failure().orElseThrow() instanceof UserCommandFailure.EmailTaken);
+        assertInstanceOf(UserCommandFailure.NotFound.class, service.handle(new UpdateUserCommand(companyB, actorB,
+                pepito.getId(), null, "Hacked", "ROLE_SUPERVISOR", null)).failure().orElseThrow());
+        assertInstanceOf(UserCommandFailure.NotFound.class, service.handle(new ChangeUserStatusCommand(companyB, actorB,
+                pepito.getId(), true)).failure().orElseThrow());
+        assertInstanceOf(UserCommandFailure.NotFound.class, service.handle(new DeleteUserCommand(companyB, actorB,
+                pepito.getId())).failure().orElseThrow());
+        assertTrue(repository.findById(pepito.getId()).orElseThrow().isActive());
     }
 
     @Test
-    void deleteUserFailsWhenUserDoesNotExist() {
-        Result<Long, UserCommandFailure> result = service.handle(new DeleteUserCommand(99L));
+    void permissionOverridesAreValidated() {
+        SignInResult owner = signUp("ownera", "Organización A");
+        warehouses.put(10L, owner.user().getCompanyId());
+        User pepito = createWorker(owner, "pepito", List.of(10L));
+        Long company = owner.user().getCompanyId();
 
-        assertTrue(result.failure().orElseThrow() instanceof UserCommandFailure.NotFound);
+        User updated = service.handle(new UpdateUserPermissionsCommand(company, owner.user().getId(), pepito.getId(),
+                Map.of("inventory.exit.create", false))).success().orElseThrow();
+        assertFalse(updated.effectivePermissions().contains(Permission.EXIT_CREATE));
+
+        assertInstanceOf(UserCommandFailure.Forbidden.class, service.handle(new UpdateUserPermissionsCommand(company,
+                owner.user().getId(), pepito.getId(), Map.of("users.create", true))).failure().orElseThrow());
+        assertInstanceOf(UserCommandFailure.Validation.class, service.handle(new UpdateUserPermissionsCommand(company,
+                owner.user().getId(), pepito.getId(), Map.of("does.not.exist", true))).failure().orElseThrow());
     }
 
     @Test
-    void deleteUserRemovesIt() {
-        service.handle(new SignUpCommand("jquispe", "juan.quispe@andina.pe", "secret123", "Juan Quispe", 1L));
+    void ownerAndOwnAccountAreProtected() {
+        SignInResult owner = signUp("ownera", "Organización A");
+        Long company = owner.user().getCompanyId();
+        Long ownerId = owner.user().getId();
 
-        assertTrue(service.handle(new DeleteUserCommand(1L)).isSuccess());
-        assertFalse(repository.existsById(1L));
+        assertInstanceOf(UserCommandFailure.Forbidden.class,
+                service.handle(new ChangeUserStatusCommand(company, ownerId, ownerId, true)).failure().orElseThrow());
+        assertInstanceOf(UserCommandFailure.Forbidden.class,
+                service.handle(new DeleteUserCommand(company, ownerId, ownerId)).failure().orElseThrow());
+        assertInstanceOf(UserCommandFailure.Forbidden.class, service.handle(new UpdateUserCommand(company, ownerId,
+                ownerId, null, null, "ROLE_OPERATOR", null)).failure().orElseThrow());
     }
 
-    private static class FakeHasher implements PasswordHasher {
-        @Override
-        public String hash(String password) {
-            return "hashed:" + password;
+    @Test
+    void suspensionInvalidatesPreviousTokens() {
+        SignInResult owner = signUp("ownera", "Organización A");
+        warehouses.put(10L, owner.user().getCompanyId());
+        User pepito = createWorker(owner, "pepito", List.of(10L));
+        long versionBefore = pepito.getTokenVersion();
+
+        User suspended = service.handle(new ChangeUserStatusCommand(owner.user().getCompanyId(), owner.user().getId(),
+                pepito.getId(), true)).success().orElseThrow();
+
+        assertEquals(versionBefore + 1, suspended.getTokenVersion());
+        assertFalse(suspended.isActive());
+    }
+
+    private final class FakeWarehouseFacade implements WarehouseContextFacade {
+        public boolean zoneBelongsToCompany(Long zoneId, Long companyId) { return false; }
+        public Optional<WarehouseZoneConfiguration> findZoneConfiguration(Long zoneId, Long companyId) { return Optional.empty(); }
+        public Set<Long> findZoneIdsByWarehouseId(Long warehouseId, Long companyId) { return Set.of(); }
+        public Set<Long> findZoneIdsByWarehouseIds(Collection<Long> ids, Long companyId) { return Set.of(); }
+        public boolean warehouseBelongsToCompany(Long warehouseId, Long companyId) {
+            return companyId != null && companyId.equals(warehouses.get(warehouseId));
         }
-
-        @Override
-        public boolean matches(String password, String hash) {
-            return hash.equals("hashed:" + password);
+        public Set<Long> findWarehouseIdsByCompanyId(Long companyId) { return Set.of(); }
+        public boolean allWarehousesBelongToCompany(Collection<Long> ids, Long companyId) {
+            return ids.stream().allMatch(id -> warehouseBelongsToCompany(id, companyId));
         }
     }
 
-    private static class FakeTokenService implements TokenService {
-        @Override
-        public String createToken(User user) {
-            return "token-for-" + user.getUsername().value();
-        }
-
-        @Override
-        public Optional<SessionUser> readToken(String token) {
-            return Optional.empty();
-        }
+    private static final class FakeHasher implements PasswordHasher {
+        public String hash(String password) { return "hashed:" + password; }
+        public boolean matches(String password, String hash) { return hash.equals("hashed:" + password); }
     }
 
-    private static class FakeUserRepository implements UserRepository {
-        private final Map<Long, User> users = new LinkedHashMap<>();
+    private static final class FakeTokenService implements TokenService {
+        public String createToken(User user) { return "token-for-" + user.getUsername().value(); }
+        public Optional<TokenClaims> readToken(String token) { return Optional.empty(); }
+    }
+
+    private static final class FakeOrganizationRepository implements OrganizationRepository {
+        private final Map<Long, Organization> rows = new LinkedHashMap<>();
         private long nextId = 1;
 
-        @Override
-        public User save(User user) {
-            Long id = user.getId() != null ? user.getId() : nextId++;
-            User saved = User.restore(id, user.getUsername(), user.getEmail(), user.getFullName(),
-                    user.getPasswordHash(), user.getRoles(), user.getCompanyId(), user.getWarehouseId(),
-                    user.getCreatedAt(), user.getUpdatedAt());
-            users.put(id, saved);
+        public Organization save(Organization organization) {
+            Long id = organization.getId() != null ? organization.getId() : nextId++;
+            Organization saved = Organization.restore(id, organization.getName(), organization.getOwnerUserId(),
+                    organization.getStatus(), organization.getCreatedAt(), organization.getUpdatedAt());
+            rows.put(id, saved);
             return saved;
         }
 
-        @Override
-        public Optional<User> findById(Long id) {
-            return Optional.ofNullable(users.get(id));
+        public Optional<Organization> findById(Long id) { return Optional.ofNullable(rows.get(id)); }
+    }
+
+    private static final class FakeUserRepository implements UserRepository {
+        private final Map<Long, User> rows = new LinkedHashMap<>();
+        private long nextId = 1;
+
+        public User save(User user) {
+            Long id = user.getId() != null ? user.getId() : nextId++;
+            User saved = User.restore(id, user.getUsername(), user.getEmail(), user.getFullName(),
+                    user.getPasswordHash(), user.getRole(), user.getStatus(), user.getTokenVersion(),
+                    user.getCompanyId(), user.getWarehouseIds(), user.getPermissionOverrides(),
+                    user.getCreatedAt(), user.getUpdatedAt());
+            rows.put(id, saved);
+            return saved;
         }
 
-        @Override
+        public Optional<User> findById(Long id) { return Optional.ofNullable(rows.get(id)); }
+        public Optional<User> findByIdAndCompanyId(Long id, Long companyId) {
+            return findById(id).filter(user -> user.belongsTo(companyId));
+        }
         public Optional<User> findByUsername(Username username) {
-            return users.values().stream().filter(user -> user.getUsername().equals(username)).findFirst();
+            return rows.values().stream().filter(u -> u.getUsername().equals(username)).findFirst();
         }
-
-        @Override
         public Optional<User> findByEmail(EmailAddress email) {
-            return users.values().stream().filter(user -> user.getEmail().equals(email)).findFirst();
+            return rows.values().stream().filter(u -> u.getEmail().equals(email)).findFirst();
         }
-
-        @Override
-        public List<User> findAll() {
-            return List.copyOf(users.values());
+        public List<User> findAllByCompanyId(Long companyId) {
+            return rows.values().stream().filter(u -> u.belongsTo(companyId)).toList();
         }
-
-        @Override
-        public boolean existsById(Long id) {
-            return users.containsKey(id);
-        }
-
-        @Override
-        public boolean existsByUsername(Username username) {
-            return findByUsername(username).isPresent();
-        }
-
-        @Override
-        public boolean existsByEmail(EmailAddress email) {
-            return findByEmail(email).isPresent();
-        }
-
-        @Override
-        public void deleteById(Long id) {
-            users.remove(id);
-        }
-
-        @Override
-        public long count() {
-            return users.size();
-        }
+        public boolean existsById(Long id) { return rows.containsKey(id); }
+        public boolean existsByUsername(Username username) { return findByUsername(username).isPresent(); }
+        public boolean existsByEmail(EmailAddress email) { return findByEmail(email).isPresent(); }
+        public void deleteById(Long id) { rows.remove(id); }
+        public long count() { return rows.size(); }
     }
 }

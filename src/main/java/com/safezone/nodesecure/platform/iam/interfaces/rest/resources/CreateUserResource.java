@@ -2,32 +2,35 @@ package com.safezone.nodesecure.platform.iam.interfaces.rest.resources;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-@Schema(description = "Data used by an administrator to add a team member")
+/**
+ * Worker account created directly by the owner. The organization is taken from the session;
+ * any organization or company id sent by the client is ignored.
+ */
+@Schema(description = "Data used by the owner to create a worker account")
 public record CreateUserResource(
-        @Schema(example = "mrojas")
-        @NotBlank(message = "{iam.error.username.notBlank}")
-        String username,
-
+        @Schema(example = "María Rojas Salas")
+        @NotBlank(message = "{iam.error.fullName.notBlank}")
+        @Size(max = 120, message = "{iam.error.fullName.size}")
+        String fullName,
         @Schema(example = "maria.rojas@andina.pe")
         @NotBlank(message = "{iam.error.email.notBlank}")
         String email,
-
-        @Schema(description = "Optional. When empty the default password is used", example = "12345678")
+        @Schema(example = "mrojas")
+        @NotBlank(message = "{iam.error.username.notBlank}")
+        String username,
+        @Schema(example = "Str0ngPass!")
+        @NotBlank(message = "{iam.error.password.notBlank}")
+        @Size(min = 8, max = 72, message = "{iam.error.password.size}")
         String password,
-
-        @Schema(example = "María Rojas Salas")
-        @NotBlank(message = "{iam.error.fullName.notBlank}")
-        String fullName,
-
-        @Schema(example = "[\"ROLE_WAREHOUSE_KEEPER\"]")
-        List<String> roles,
-
-        @Schema(description = "Optional. When empty the company of the current user is used", example = "1")
-        Long companyId,
-
-        @Schema(example = "2")
+        @Schema(example = "ROLE_OPERATOR", allowableValues = {"ROLE_SUPERVISOR", "ROLE_OPERATOR"})
+        @NotBlank(message = "{iam.error.role.invalid}")
+        String role,
+        @Schema(description = "Assigned warehouses (at least one)", example = "[1]")
+        List<Long> warehouseIds,
+        @Schema(description = "Single assigned warehouse; used when warehouseIds is empty", example = "1")
         Long warehouseId) {
 }

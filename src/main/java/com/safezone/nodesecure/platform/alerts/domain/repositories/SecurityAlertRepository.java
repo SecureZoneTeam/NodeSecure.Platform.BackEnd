@@ -19,5 +19,7 @@ public interface SecurityAlertRepository {
     /**
      * Lists alerts, newest first. Every filter is optional ({@code null} means "any").
      */
-    List<SecurityAlert> findAll(AlertStatus status, AlertSeverity severity, Long warehouseId);
+    /** Only alerts of {@code allowedWarehouseIds} are returned (empty set = none). */
+    List<SecurityAlert> findAll(AlertStatus status, AlertSeverity severity, Long warehouseId,
+                                java.util.Collection<Long> allowedWarehouseIds);
 }

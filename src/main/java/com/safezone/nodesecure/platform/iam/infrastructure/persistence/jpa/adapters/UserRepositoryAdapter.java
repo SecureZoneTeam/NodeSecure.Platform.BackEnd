@@ -6,7 +6,6 @@ import com.safezone.nodesecure.platform.iam.domain.model.valueobjects.Username;
 import com.safezone.nodesecure.platform.iam.domain.repositories.UserRepository;
 import com.safezone.nodesecure.platform.iam.infrastructure.persistence.jpa.UserJpaRepository;
 import com.safezone.nodesecure.platform.iam.infrastructure.persistence.jpa.mappers.UserPersistenceMapper;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -34,6 +33,14 @@ public class UserRepositoryAdapter implements UserRepository {
     }
 
     @Override
+    public Optional<User> findByIdAndCompanyId(Long id, Long companyId) {
+        if (id == null || companyId == null) {
+            return Optional.empty();
+        }
+        return jpa.findByIdAndCompanyId(id, companyId).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<User> findByUsername(Username username) {
         return jpa.findByUsername(username.value()).map(mapper::toDomain);
     }
@@ -44,8 +51,11 @@ public class UserRepositoryAdapter implements UserRepository {
     }
 
     @Override
-    public List<User> findAll() {
-        return jpa.findAll(Sort.by("id")).stream().map(mapper::toDomain).toList();
+    public List<User> findAllByCompanyId(Long companyId) {
+        if (companyId == null) {
+            return List.of();
+        }
+        return jpa.findAllByCompanyIdOrderByIdAsc(companyId).stream().map(mapper::toDomain).toList();
     }
 
     @Override

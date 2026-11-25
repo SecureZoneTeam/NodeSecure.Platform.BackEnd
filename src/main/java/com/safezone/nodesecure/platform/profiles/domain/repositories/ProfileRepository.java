@@ -9,4 +9,8 @@ import java.util.Optional;
 @Repository
 public interface ProfileRepository extends JpaRepository<Profile, Long> {
     Optional<Profile> findByEmail(String email);
+
+    java.util.List<Profile> findAllByCompanyIdOrderByIdAsc(Long companyId);
+
+    Optional<Profile> findByIdAndCompanyId(Long id, Long companyId);
 }

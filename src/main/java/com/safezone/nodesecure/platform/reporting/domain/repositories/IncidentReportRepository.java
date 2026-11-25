@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface IncidentReportRepository extends JpaRepository<IncidentReport, Long> {
+    java.util.List<IncidentReport> findAllByCompanyIdOrderByIdAsc(Long companyId);
 }

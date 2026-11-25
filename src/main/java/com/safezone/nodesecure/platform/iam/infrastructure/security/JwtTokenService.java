@@ -1,7 +1,7 @@
 package com.safezone.nodesecure.platform.iam.infrastructure.security;
 
 import com.safezone.nodesecure.platform.iam.domain.model.aggregates.User;
-import com.safezone.nodesecure.platform.iam.domain.model.valueobjects.SessionUser;
+import com.safezone.nodesecure.platform.iam.domain.model.valueobjects.TokenClaims;
 import com.safezone.nodesecure.platform.iam.domain.services.TokenService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -16,9 +16,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
-import java.util.List;
 import java.util.Optional;
 
+/**
+ * Issues identity-only tokens: user id, organization id and token version.
+ * Role, permissions and warehouses are not stored in the token (they are read from the database).
+ */
 @Component
 public class JwtTokenService implements TokenService {
 
@@ -27,10 +30,10 @@ public class JwtTokenService implements TokenService {
     private final Clock clock;
 
     public JwtTokenService(@Value("${jwt.secret}") String secret,
-                           @Value("${jwt.expiration-days}") long days,
+                           @Value("${jwt.expiration-minutes:480}") long minutes,
                            Clock clock) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-        this.lifetime = Duration.ofDays(days);
+        this.lifetime = Duration.ofMinutes(Math.max(1, minutes));
         this.clock = clock;
     }
 
@@ -41,8 +44,7 @@ public class JwtTokenService implements TokenService {
                 .subject(user.getUsername().value())
                 .claim("userId", user.getId())
                 .claim("companyId", user.getCompanyId())
-                .claim("warehouseId", user.getWarehouseId())
-                .claim("roles", user.getRoleNames())
+                .claim("tokenVersion", user.getTokenVersion())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(lifetime)))
                 .signWith(key)
@@ -50,7 +52,7 @@ public class JwtTokenService implements TokenService {
     }
 
     @Override
-    public Optional<SessionUser> readToken(String token) {
+    public Optional<TokenClaims> readToken(String token) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(key)
@@ -58,12 +60,16 @@ public class JwtTokenService implements TokenService {
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-            return Optional.of(new SessionUser(
+            Long tokenVersion = toLong(claims.get("tokenVersion"));
+            if (tokenVersion == null) {
+                // Tokens issued before the multi-tenant model carry roles in the payload: rejected.
+                return Optional.empty();
+            }
+            return Optional.of(new TokenClaims(
                     toLong(claims.get("userId")),
                     claims.getSubject(),
                     toLong(claims.get("companyId")),
-                    toLong(claims.get("warehouseId")),
-                    toRoles(claims.get("roles"))));
+                    tokenVersion));
         } catch (JwtException | IllegalArgumentException exception) {
             return Optional.empty();
         }
@@ -74,12 +80,5 @@ public class JwtTokenService implements TokenService {
             return number.longValue();
         }
         return null;
-    }
-
-    private List<String> toRoles(Object value) {
-        if (value instanceof List<?> list) {
-            return list.stream().map(String::valueOf).toList();
-        }
-        return List.of();
     }
 }

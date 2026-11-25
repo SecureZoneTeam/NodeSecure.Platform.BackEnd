@@ -13,6 +13,7 @@ public final class StockMovement extends AbstractDomainAggregateRoot {
     private static final int PERFORMED_BY_MAX_LENGTH = 100;
 
     private final Long id;
+    private final Long companyId;
     private final Long productId;
     private final Long warehouseId;
     private final StockMovementType type;
@@ -23,12 +24,13 @@ public final class StockMovement extends AbstractDomainAggregateRoot {
     private final Instant occurredAt;
     private final String justification;
 
-    private StockMovement(Long id, Long productId, Long warehouseId, StockMovementType type, int quantity,
-                          int previousStock, int resultingStock, String performedBy, Instant occurredAt,
-                          String justification) {
+    private StockMovement(Long id, Long companyId, Long productId, Long warehouseId, StockMovementType type,
+                          int quantity, int previousStock, int resultingStock, String performedBy,
+                          Instant occurredAt, String justification) {
         if (productId == null || productId <= 0) throw new IllegalArgumentException("stock.error.product.invalid");
         if (warehouseId == null || warehouseId <= 0) throw new IllegalArgumentException("stock.error.warehouse.invalid");
         this.id = id;
+        this.companyId = companyId;
         this.productId = productId;
         this.warehouseId = warehouseId;
         this.type = Objects.requireNonNull(type);
@@ -40,9 +42,11 @@ public final class StockMovement extends AbstractDomainAggregateRoot {
         this.justification = justification;
     }
 
-    public static StockMovement register(Long productId, Long warehouseId, StockMovementType type, int quantity,
-                                         int previousStock, int resultingStock, String performedBy,
+    /** Every new movement belongs to an organization (the one of the product and the warehouse). */
+    public static StockMovement register(Long companyId, Long productId, Long warehouseId, StockMovementType type,
+                                         int quantity, int previousStock, int resultingStock, String performedBy,
                                          String justification, Instant now) {
+        if (companyId == null || companyId <= 0) throw new IllegalArgumentException("product.error.companyId.invalid");
         if (type == null) throw new IllegalArgumentException("stock.error.type.required");
         if (previousStock < 0 || resultingStock < 0) throw new IllegalArgumentException("stock.error.countedStock.invalid");
         String normalizedJustification = null;
@@ -52,19 +56,25 @@ public final class StockMovement extends AbstractDomainAggregateRoot {
         } else if (quantity <= 0) {
             throw new IllegalArgumentException("stock.error.quantity.invalid");
         }
-        var movement = new StockMovement(null, productId, warehouseId, type, quantity, previousStock,
+        var movement = new StockMovement(null, companyId, productId, warehouseId, type, quantity, previousStock,
                 resultingStock, performedBy, now, normalizedJustification);
         movement.registerEvent(new StockMovementRegisteredEvent(productId, warehouseId, type, quantity,
                 resultingStock, now));
         return movement;
     }
 
-    public static StockMovement rehydrate(Long id, Long productId, Long warehouseId, StockMovementType type,
-                                          int quantity, int previousStock, int resultingStock, String performedBy,
-                                          Instant occurredAt, String justification) {
+    /** {@code companyId} may be null only for rows created before the multi-tenant migration. */
+    public static StockMovement rehydrate(Long id, Long companyId, Long productId, Long warehouseId,
+                                          StockMovementType type, int quantity, int previousStock,
+                                          int resultingStock, String performedBy, Instant occurredAt,
+                                          String justification) {
         if (id == null || id <= 0) throw new IllegalArgumentException("stock.error.id.invalid");
-        return new StockMovement(id, productId, warehouseId, type, quantity, previousStock, resultingStock,
-                performedBy, occurredAt, justification);
+        return new StockMovement(id, companyId, productId, warehouseId, type, quantity, previousStock,
+                resultingStock, performedBy, occurredAt, justification);
+    }
+
+    public Long getCompanyId() {
+        return companyId;
     }
 
     private static String normalizeJustification(String justification) {

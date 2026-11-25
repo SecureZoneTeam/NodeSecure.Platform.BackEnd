@@ -14,6 +14,7 @@ import java.util.Optional;
 @Service
 @Transactional(readOnly = true)
 public class StockMovementQueryServiceImpl implements StockMovementQueryService {
+
     private final StockMovementRepository repository;
 
     public StockMovementQueryServiceImpl(StockMovementRepository repository) {
@@ -22,11 +23,18 @@ public class StockMovementQueryServiceImpl implements StockMovementQueryService 
 
     @Override
     public List<StockMovement> handle(GetAllStockMovementsQuery query) {
-        return repository.findAll(query.productId(), query.warehouseId(), query.type());
+        return repository.findAll(query.companyId(), query.productId(), query.warehouseId(), query.type(),
+                        query.warehouseScope()).stream()
+                .filter(movement -> query.allowedTypes().contains(movement.getType()))
+                .toList();
     }
 
     @Override
     public Optional<StockMovement> handle(GetStockMovementByIdQuery query) {
-        return repository.findById(query.id());
+        return repository.findById(query.id())
+                .filter(movement -> query.companyId().equals(movement.getCompanyId()))
+                .filter(movement -> query.warehouseScope() == null
+                        || query.warehouseScope().contains(movement.getWarehouseId()))
+                .filter(movement -> query.allowedTypes().contains(movement.getType()));
     }
 }

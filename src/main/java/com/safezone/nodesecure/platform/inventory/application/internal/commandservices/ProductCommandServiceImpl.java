@@ -1,9 +1,9 @@
 package com.safezone.nodesecure.platform.inventory.application.internal.commandservices;
 
-import com.safezone.nodesecure.platform.inventory.application.commandservices.ProductCommandFailure;
-import com.safezone.nodesecure.platform.inventory.application.commandservices.ProductCommandService;
 import com.safezone.nodesecure.platform.inventory.application.commands.CreateProductCommand;
 import com.safezone.nodesecure.platform.inventory.application.commands.UpdateProductCommand;
+import com.safezone.nodesecure.platform.inventory.application.commandservices.ProductCommandFailure;
+import com.safezone.nodesecure.platform.inventory.application.commandservices.ProductCommandService;
 import com.safezone.nodesecure.platform.inventory.domain.exceptions.DuplicateSkuException;
 import com.safezone.nodesecure.platform.inventory.domain.model.aggregates.Product;
 import com.safezone.nodesecure.platform.inventory.domain.repositories.ProductRepository;
@@ -16,6 +16,7 @@ import java.time.Clock;
 
 @Service
 public class ProductCommandServiceImpl implements ProductCommandService {
+
     private final ProductRepository repository;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
@@ -47,7 +48,9 @@ public class ProductCommandServiceImpl implements ProductCommandService {
     @Override
     @Transactional
     public Result<Product, ProductCommandFailure> handle(UpdateProductCommand command) {
-        var existing = repository.findById(command.id());
+        // A product of another organization behaves exactly like a missing product.
+        var existing = repository.findById(command.id())
+                .filter(product -> command.companyId().equals(product.getCompanyId()));
         if (existing.isEmpty())
             return Result.failure(new ProductCommandFailure.NotFound(command.id()));
         var product = existing.get();

@@ -6,6 +6,7 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "stock_movement", indexes = {
+        @Index(name = "idx_stock_movement_company_id", columnList = "company_id"),
         @Index(name = "idx_stock_movement_product_id", columnList = "product_id"),
         @Index(name = "idx_stock_movement_warehouse_id", columnList = "warehouse_id"),
         @Index(name = "idx_stock_movement_occurred_at", columnList = "occurred_at")
@@ -14,6 +15,9 @@ public class StockMovementJpaEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    /** Nullable only for rows created before the multi-tenant migration (the script back-fills them). */
+    @Column(name = "company_id", updatable = false)
+    private Long companyId;
     @Column(name = "product_id", nullable = false, updatable = false)
     private Long productId;
     @Column(name = "warehouse_id", nullable = false, updatable = false)
@@ -36,10 +40,11 @@ public class StockMovementJpaEntity {
     protected StockMovementJpaEntity() {
     }
 
-    public StockMovementJpaEntity(Long id, Long productId, Long warehouseId, String type, int quantity,
-                                  int previousStock, int resultingStock, String performedBy, Instant occurredAt,
-                                  String justification) {
+    public StockMovementJpaEntity(Long id, Long companyId, Long productId, Long warehouseId, String type,
+                                  int quantity, int previousStock, int resultingStock, String performedBy,
+                                  Instant occurredAt, String justification) {
         this.id = id;
+        this.companyId = companyId;
         this.productId = productId;
         this.warehouseId = warehouseId;
         this.type = type;
@@ -53,6 +58,10 @@ public class StockMovementJpaEntity {
 
     public Long getId() {
         return id;
+    }
+
+    public Long getCompanyId() {
+        return companyId;
     }
 
     public Long getProductId() {

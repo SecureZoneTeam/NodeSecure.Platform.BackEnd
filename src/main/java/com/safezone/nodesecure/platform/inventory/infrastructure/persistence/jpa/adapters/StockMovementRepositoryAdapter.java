@@ -34,8 +34,15 @@ public class StockMovementRepositoryAdapter implements StockMovementRepository {
     }
 
     @Override
-    public List<StockMovement> findAll(Long productId, Long warehouseId, StockMovementType type) {
-        Specification<StockMovementJpaEntity> spec = (root, query, cb) -> cb.conjunction();
+    public List<StockMovement> findAll(Long companyId, Long productId, Long warehouseId, StockMovementType type,
+                                       java.util.Collection<Long> warehouseScope) {
+        if (companyId == null || (warehouseScope != null && warehouseScope.isEmpty())) {
+            return List.of();
+        }
+        Specification<StockMovementJpaEntity> spec = (root, query, cb) -> cb.equal(root.get("companyId"), companyId);
+        if (warehouseScope != null) {
+            spec = spec.and((root, query, cb) -> root.get("warehouseId").in(warehouseScope));
+        }
         if (productId != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("productId"), productId));
         }

@@ -39,9 +39,9 @@ public class SensorQueryServiceImpl implements SensorQueryService {
     @Transactional
     public List<SensorNode> handle(GetAllSensorNodesQuery query) {
         Instant now = clock.instant();
-        Set<Long> assignedZoneIds = query.warehouseId() == null
+        Set<Long> assignedZoneIds = query.warehouseIds() == null
                 ? null
-                : warehouseFacade.findZoneIdsByWarehouseId(query.warehouseId(), query.companyId());
+                : warehouseFacade.findZoneIdsByWarehouseIds(query.warehouseIds(), query.companyId());
         return repository.findAllByCompanyId(query.companyId()).stream()
                 .filter(node -> assignedZoneIds == null || assignedZoneIds.contains(node.getZoneId()))
                 .map(node -> refreshStatus(node, now))
@@ -57,9 +57,9 @@ public class SensorQueryServiceImpl implements SensorQueryService {
     }
 
     private boolean belongsToWarehouse(SensorNode node, GetSensorNodeByIdQuery query) {
-        if (query.warehouseId() == null) return true;
+        if (query.warehouseIds() == null) return true;
         return warehouseFacade.findZoneConfiguration(node.getZoneId(), query.companyId())
-                .map(configuration -> configuration.warehouseId().equals(query.warehouseId()))
+                .map(configuration -> query.warehouseIds().contains(configuration.warehouseId()))
                 .orElse(false);
     }
 

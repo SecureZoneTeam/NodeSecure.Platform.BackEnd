@@ -19,12 +19,10 @@ public class StockMovementCommandHttpResponseMapper {
     }
 
     private static HttpStatus statusFromFailure(StockMovementCommandFailure failure) {
-        if (failure instanceof StockMovementCommandFailure.ProductNotFound) {
-            return HttpStatus.NOT_FOUND;
-        }
-        if (failure instanceof StockMovementCommandFailure.InsufficientStock) {
-            return HttpStatus.CONFLICT;
-        }
-        return HttpStatus.BAD_REQUEST;
+        return switch (failure) {
+            case StockMovementCommandFailure.ProductNotFound notFound -> HttpStatus.NOT_FOUND;
+            case StockMovementCommandFailure.WarehouseNotFound notFound -> HttpStatus.NOT_FOUND;
+            case StockMovementCommandFailure.InsufficientStock insufficient -> HttpStatus.CONFLICT;
+        };
     }
 }

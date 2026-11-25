@@ -16,6 +16,10 @@ public class IncidentReport {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** Organization (tenant). Nullable only for rows created before the multi-tenant migration. */
+    @Column(name = "company_id")
+    private Long companyId;
+
     @Column(nullable = false)
     private String warehouseName;
 

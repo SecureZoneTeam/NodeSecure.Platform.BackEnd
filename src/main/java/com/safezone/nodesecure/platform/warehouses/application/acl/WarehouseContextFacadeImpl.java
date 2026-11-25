@@ -5,6 +5,7 @@ import com.safezone.nodesecure.platform.warehouses.interfaces.acl.WarehouseConte
 import com.safezone.nodesecure.platform.warehouses.interfaces.acl.WarehouseZoneConfiguration;
 import com.safezone.nodesecure.platform.warehouses.domain.model.aggregates.Warehouse;
 import com.safezone.nodesecure.platform.warehouses.domain.model.entities.WarehouseZone;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -45,6 +46,44 @@ public class WarehouseContextFacadeImpl implements WarehouseContextFacade {
                         .filter(java.util.Objects::nonNull)
                         .collect(Collectors.toUnmodifiableSet()))
                 .orElseGet(Set::of);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<Long> findZoneIdsByWarehouseIds(Collection<Long> warehouseIds, Long companyId) {
+        if (companyId == null) return Set.of();
+        return repository.findAllByCompanyId(companyId).stream()
+                .filter(warehouse -> warehouseIds == null || warehouseIds.contains(warehouse.getId()))
+                .flatMap(warehouse -> warehouse.getZones().stream())
+                .map(WarehouseZone::getId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean warehouseBelongsToCompany(Long warehouseId, Long companyId) {
+        if (warehouseId == null || companyId == null) return false;
+        return repository.findByIdAndCompanyId(warehouseId, companyId).isPresent();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<Long> findWarehouseIdsByCompanyId(Long companyId) {
+        if (companyId == null) return Set.of();
+        return repository.findAllByCompanyId(companyId).stream()
+                .map(Warehouse::getId)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean allWarehousesBelongToCompany(Collection<Long> warehouseIds, Long companyId) {
+        if (warehouseIds == null || companyId == null) return false;
+        Set<Long> companyWarehouseIds = repository.findAllByCompanyId(companyId).stream()
+                .map(Warehouse::getId)
+                .collect(Collectors.toSet());
+        return companyWarehouseIds.containsAll(warehouseIds);
     }
 
     private WarehouseZoneConfiguration toConfiguration(Warehouse warehouse, WarehouseZone zone) {

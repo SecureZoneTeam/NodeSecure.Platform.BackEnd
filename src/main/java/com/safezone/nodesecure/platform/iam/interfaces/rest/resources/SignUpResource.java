@@ -4,25 +4,25 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-@Schema(description = "Data used to create a new account")
+/** Public sign-up: creates a new organization and its owner. There is no way to choose an existing organization. */
+@Schema(description = "Data used to register a new owner and its organization")
 public record SignUpResource(
-        @Schema(example = "jquispe")
-        @NotBlank(message = "{iam.error.username.notBlank}")
-        String username,
-
+        @Schema(example = "Juan Quispe Mamani")
+        @NotBlank(message = "{iam.error.fullName.notBlank}")
+        @Size(max = 120, message = "{iam.error.fullName.size}")
+        String fullName,
         @Schema(example = "juan.quispe@andina.pe")
         @NotBlank(message = "{iam.error.email.notBlank}")
         String email,
-
-        @Schema(example = "12345678")
+        @Schema(example = "jquispe")
+        @NotBlank(message = "{iam.error.username.notBlank}")
+        String username,
+        @Schema(example = "Str0ngPass!")
         @NotBlank(message = "{iam.error.password.notBlank}")
         @Size(min = 8, max = 72, message = "{iam.error.password.size}")
         String password,
-
-        @Schema(example = "Juan Quispe Mamani")
-        @NotBlank(message = "{iam.error.fullName.notBlank}")
-        String fullName,
-
-        @Schema(example = "1")
-        Long companyId) {
+        @Schema(example = "Distribuidora Andina S.A.C.")
+        @NotBlank(message = "{iam.error.organization.name.notBlank}")
+        @Size(max = 120, message = "{iam.error.organization.name.size}")
+        String organizationName) {
 }

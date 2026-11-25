@@ -12,7 +12,7 @@ class StockMovementTest {
 
     @Test
     void entryIgnoresJustificationAndEmitsEvent() {
-        var movement = StockMovement.register(1L, 1L, StockMovementType.ENTRY, 50, 0, 50, "fperez", "ignored text here", NOW);
+        var movement = StockMovement.register(1L, 1L, 1L, StockMovementType.ENTRY, 50, 0, 50, "fperez", "ignored text here", NOW);
         assertNull(movement.getJustification());
         assertEquals(1, movement.pullDomainEvents().size());
         assertTrue(movement.pullDomainEvents().isEmpty());
@@ -21,20 +21,20 @@ class StockMovementTest {
     @Test
     void entryAndExitRequirePositiveQuantity() {
         assertThrows(IllegalArgumentException.class,
-                () -> StockMovement.register(1L, 1L, StockMovementType.ENTRY, 0, 0, 0, "fperez", null, NOW));
+                () -> StockMovement.register(1L, 1L, 1L, StockMovementType.ENTRY, 0, 0, 0, "fperez", null, NOW));
         assertThrows(IllegalArgumentException.class,
-                () -> StockMovement.register(1L, 1L, StockMovementType.EXIT, -2, 5, 5, "fperez", null, NOW));
+                () -> StockMovement.register(1L, 1L, 1L, StockMovementType.EXIT, -2, 5, 5, "fperez", null, NOW));
     }
 
     @Test
     void reconciliationRequiresJustificationBetween10And300Characters() {
         assertThrows(IllegalArgumentException.class,
-                () -> StockMovement.register(1L, 1L, StockMovementType.RECONCILIATION, 7, 10, 7, "lravello", null, NOW));
+                () -> StockMovement.register(1L, 1L, 1L, StockMovementType.RECONCILIATION, 7, 10, 7, "lravello", null, NOW));
         assertThrows(IllegalArgumentException.class,
-                () -> StockMovement.register(1L, 1L, StockMovementType.RECONCILIATION, 7, 10, 7, "lravello", "too short", NOW));
+                () -> StockMovement.register(1L, 1L, 1L, StockMovementType.RECONCILIATION, 7, 10, 7, "lravello", "too short", NOW));
         assertThrows(IllegalArgumentException.class,
-                () -> StockMovement.register(1L, 1L, StockMovementType.RECONCILIATION, 7, 10, 7, "lravello", "x".repeat(301), NOW));
-        var ok = StockMovement.register(1L, 1L, StockMovementType.RECONCILIATION, 0, 10, 0, "lravello",
+                () -> StockMovement.register(1L, 1L, 1L, StockMovementType.RECONCILIATION, 7, 10, 7, "lravello", "x".repeat(301), NOW));
+        var ok = StockMovement.register(1L, 1L, 1L, StockMovementType.RECONCILIATION, 0, 10, 0, "lravello",
                 "  Physical count after alert  ", NOW);
         assertEquals("Physical count after alert", ok.getJustification());
     }
@@ -42,11 +42,11 @@ class StockMovementTest {
     @Test
     void requiresProductWarehouseAndPerformer() {
         assertThrows(IllegalArgumentException.class,
-                () -> StockMovement.register(0L, 1L, StockMovementType.ENTRY, 1, 0, 1, "fperez", null, NOW));
+                () -> StockMovement.register(1L, 0L, 1L, StockMovementType.ENTRY, 1, 0, 1, "fperez", null, NOW));
         assertThrows(IllegalArgumentException.class,
-                () -> StockMovement.register(1L, null, StockMovementType.ENTRY, 1, 0, 1, "fperez", null, NOW));
+                () -> StockMovement.register(1L, 1L, null, StockMovementType.ENTRY, 1, 0, 1, "fperez", null, NOW));
         assertThrows(IllegalArgumentException.class,
-                () -> StockMovement.register(1L, 1L, StockMovementType.ENTRY, 1, 0, 1, " ", null, NOW));
+                () -> StockMovement.register(1L, 1L, 1L, StockMovementType.ENTRY, 1, 0, 1, " ", null, NOW));
     }
 
     @Test

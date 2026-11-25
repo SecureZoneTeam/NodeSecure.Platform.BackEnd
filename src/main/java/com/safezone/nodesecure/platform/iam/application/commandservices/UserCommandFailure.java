@@ -4,7 +4,10 @@ public sealed interface UserCommandFailure permits
         UserCommandFailure.UsernameTaken,
         UserCommandFailure.EmailTaken,
         UserCommandFailure.InvalidCredentials,
-        UserCommandFailure.NotFound {
+        UserCommandFailure.AccountSuspended,
+        UserCommandFailure.NotFound,
+        UserCommandFailure.Forbidden,
+        UserCommandFailure.Validation {
 
     String messageKey();
 
@@ -29,10 +32,25 @@ public sealed interface UserCommandFailure permits
         }
     }
 
+    record AccountSuspended() implements UserCommandFailure {
+        @Override
+        public String messageKey() {
+            return "iam.error.accountSuspended";
+        }
+    }
+
+    /** Also returned for users of another organization, so their existence is not revealed. */
     record NotFound(Long id) implements UserCommandFailure {
         @Override
         public String messageKey() {
             return "iam.error.notFoundById";
         }
+    }
+
+    /** The operation is not allowed on this user (owner, own account, ...). */
+    record Forbidden(String messageKey) implements UserCommandFailure {
+    }
+
+    record Validation(String messageKey) implements UserCommandFailure {
     }
 }

@@ -43,7 +43,8 @@ class SecurityAlertCommandServiceImplTest {
             }
             public Optional<SecurityAlert> findById(Long id) { return Optional.ofNullable(alerts.get(id)); }
             public Optional<SecurityAlert> findByIdForUpdate(Long id) { return findById(id); }
-            public List<SecurityAlert> findAll(AlertStatus status, AlertSeverity severity, Long warehouseId) {
+            public List<SecurityAlert> findAll(AlertStatus status, AlertSeverity severity, Long warehouseId,
+                                               java.util.Collection<Long> allowedWarehouseIds) {
                 return List.copyOf(alerts.values());
             }
         };

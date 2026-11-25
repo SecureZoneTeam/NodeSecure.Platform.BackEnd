@@ -9,12 +9,13 @@ class RoleTest {
 
     @Test
     void readsRoleFromText() {
-        assertEquals(Role.ROLE_AUDITOR, Role.from(" role_auditor "));
+        assertEquals(Role.ROLE_OPERATOR, Role.from(" role_operator "));
+        assertEquals(Role.ROLE_SUPERVISOR, Role.from("supervisor"));
     }
 
     @Test
     void rejectsUnknownRole() {
-        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> Role.from("ROLE_BOSS"));
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> Role.from("ROLE_ADMINISTRATOR"));
         assertEquals("iam.error.role.invalid", error.getMessage());
     }
 }

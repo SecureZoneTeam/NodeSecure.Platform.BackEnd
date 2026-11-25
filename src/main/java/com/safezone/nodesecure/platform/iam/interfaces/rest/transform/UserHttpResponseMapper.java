@@ -10,7 +10,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
-public class UserHttpResponseMapper {
+public final class UserHttpResponseMapper {
+
+    private UserHttpResponseMapper() {
+    }
 
     public static ResponseEntity<?> toResponse(Result<User, UserCommandFailure> result, HttpStatus okStatus,
                                                MessageSource messages) {
@@ -20,9 +23,9 @@ public class UserHttpResponseMapper {
     }
 
     public static ResponseEntity<?> toSignInResponse(Result<SignInResult, UserCommandFailure> result,
-                                                     MessageSource messages) {
+                                                     HttpStatus okStatus, MessageSource messages) {
         return result.fold(
-                signIn -> ResponseEntity.ok(UserResourceMapper.toAuthenticatedResource(signIn)),
+                signIn -> ResponseEntity.status(okStatus).body(UserResourceMapper.toAuthenticatedResource(signIn)),
                 failure -> toProblem(failure, messages));
     }
 
@@ -37,6 +40,12 @@ public class UserHttpResponseMapper {
         return problem(HttpStatus.NOT_FOUND, "iam.error.notFoundById", messages, id);
     }
 
+    public static ResponseEntity<ProblemDetail> problem(HttpStatus status, String key, MessageSource messages,
+                                                        Object... args) {
+        String detail = messages.getMessage(key, args, key, LocaleContextHolder.getLocale());
+        return ResponseEntity.status(status).body(ProblemDetail.forStatusAndDetail(status, detail));
+    }
+
     private static ResponseEntity<ProblemDetail> toProblem(UserCommandFailure failure, MessageSource messages) {
         if (failure instanceof UserCommandFailure.NotFound notFound) {
             return notFound(notFound.id(), messages);
@@ -49,13 +58,10 @@ public class UserHttpResponseMapper {
             case UserCommandFailure.UsernameTaken taken -> HttpStatus.CONFLICT;
             case UserCommandFailure.EmailTaken taken -> HttpStatus.CONFLICT;
             case UserCommandFailure.InvalidCredentials invalid -> HttpStatus.UNAUTHORIZED;
+            case UserCommandFailure.AccountSuspended suspended -> HttpStatus.FORBIDDEN;
             case UserCommandFailure.NotFound notFound -> HttpStatus.NOT_FOUND;
+            case UserCommandFailure.Forbidden forbidden -> HttpStatus.FORBIDDEN;
+            case UserCommandFailure.Validation validation -> HttpStatus.BAD_REQUEST;
         };
-    }
-
-    private static ResponseEntity<ProblemDetail> problem(HttpStatus status, String key, MessageSource messages,
-                                                         Object... args) {
-        String detail = messages.getMessage(key, args, key, LocaleContextHolder.getLocale());
-        return ResponseEntity.status(status).body(ProblemDetail.forStatusAndDetail(status, detail));
     }
 }

@@ -22,7 +22,7 @@ public class SecurityAlertQueryServiceImpl implements SecurityAlertQueryService 
 
     @Override
     public List<SecurityAlert> handle(GetAllSecurityAlertsQuery query) {
-        return repository.findAll(query.status(), query.severity(), query.warehouseId());
+        return repository.findAll(query.status(), query.severity(), query.warehouseId(), query.allowedWarehouseIds());
     }
 
     @Override

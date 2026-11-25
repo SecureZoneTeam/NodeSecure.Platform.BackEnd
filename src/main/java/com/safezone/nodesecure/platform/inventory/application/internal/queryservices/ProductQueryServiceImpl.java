@@ -14,6 +14,7 @@ import java.util.Optional;
 @Service
 @Transactional(readOnly = true)
 public class ProductQueryServiceImpl implements ProductQueryService {
+
     private final ProductRepository repository;
 
     public ProductQueryServiceImpl(ProductRepository repository) {
@@ -22,13 +23,12 @@ public class ProductQueryServiceImpl implements ProductQueryService {
 
     @Override
     public List<Product> handle(GetAllProductsQuery query) {
-        return query.companyId() == null
-                ? repository.findAll()
-                : repository.findAllByCompanyId(query.companyId());
+        return repository.findAllByCompanyId(query.companyId());
     }
 
     @Override
     public Optional<Product> handle(GetProductByIdQuery query) {
-        return repository.findById(query.id());
+        return repository.findById(query.id())
+                .filter(product -> query.companyId().equals(product.getCompanyId()));
     }
 }

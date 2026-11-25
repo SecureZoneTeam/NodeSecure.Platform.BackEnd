@@ -1,7 +1,9 @@
 package com.safezone.nodesecure.platform.iam.application.queryservices;
 
 import com.safezone.nodesecure.platform.iam.application.queries.GetAllUsersQuery;
+import com.safezone.nodesecure.platform.iam.application.queries.GetOrganizationByIdQuery;
 import com.safezone.nodesecure.platform.iam.application.queries.GetUserByIdQuery;
+import com.safezone.nodesecure.platform.iam.domain.model.aggregates.Organization;
 import com.safezone.nodesecure.platform.iam.domain.model.aggregates.User;
 
 import java.util.List;
@@ -12,4 +14,6 @@ public interface UserQueryService {
     List<User> handle(GetAllUsersQuery query);
 
     Optional<User> handle(GetUserByIdQuery query);
+
+    Optional<Organization> handle(GetOrganizationByIdQuery query);
 }

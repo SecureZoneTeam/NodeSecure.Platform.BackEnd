@@ -29,20 +29,15 @@ API REST de **NodeSecure** (startup **SafeZone**): seguridad física con sensore
 3. Abre Swagger: <http://localhost:8080/swagger-ui.html>
 4. Inicia sesión en `POST /api/v1/authentication/sign-in` con un usuario de prueba, copia el `token` y pégalo en el botón **Authorize** de Swagger.
 
-Usuarios de prueba (contraseña `12345678`):
+En una base local vacía se crea la organización "NodeSecure Demo" con su propietario `fperez` (contraseña `IAM_DEFAULT_PASSWORD`, por defecto `12345678`). Los trabajadores se crean desde `POST /api/v1/users` o desde "Equipos y accesos". Desactívalo con `IAM_SEED_DEMO_DATA=false`.
 
-| Usuario | Rol |
-| --- | --- |
-| `fperez` | ROLE_ADMINISTRATOR |
-| `lanahua` | ROLE_SECURITY_MANAGER |
-| `ksandoval` | ROLE_WAREHOUSE_KEEPER |
-| `lravello` | ROLE_AUDITOR |
-
-Pruebas unitarias:
+Pruebas (unitarias + integración contra un MySQL 8 aislado en Docker con Testcontainers; requiere Docker Desktop en ejecución):
 
 ```powershell
 .\mvnw clean test
 ```
+
+Las pruebas de integración nunca usan FreeDB: arrancan su propio contenedor `mysql:8.0` y abortan si la URL no apunta a ese contenedor.
 
 ## Variables de entorno
 
@@ -93,53 +88,73 @@ Cada contexto sigue las mismas capas que `iam/`:
 - **Commits:** Conventional Commits en inglés, por ejemplo `feat(warehouses): add Warehouse aggregate`.
 - **Archivos compartidos:** `pom.xml`, `application*.properties`, `shared/` y `SecurityConfig` los cambia Sebas; pídelo en el grupo o en tu PR.
 - **Mensajes de error:** agrega tus claves en `messages.properties` y `messages_es.properties` con el prefijo de tu contexto (`warehouse.error...`, `inventory.error...`).
-- **Proteger un endpoint por rol:** usa `@PreAuthorize` en tu controller; no hace falta tocar `SecurityConfig`.
+- **Proteger un endpoint:** usa `@PreAuthorize` con un **permiso** (no con el nombre del rol). El catálogo está en `iam/domain/model/valueobjects/Permission.java` y los permisos por defecto de cada rol en `RolePermissions.java`.
 
     ```java
-    @PreAuthorize("hasAnyRole('ADMINISTRATOR', 'WAREHOUSE_KEEPER')")
+    @PreAuthorize("hasAuthority('inventory.entry.create')")
     @PostMapping
     public ResponseEntity<?> createStockEntry(...)
     ```
 
-- **Usuario actual:** inyecta `IamContextFacade` y usa `currentUsername()`, `currentUserId()`, `currentCompanyId()` o `currentWarehouseId()` para `createdBy`, `performedBy` y filtros por empresa.
+- **Organización y alcance:** inyecta `IamContextFacade` y usa `requireCompanyId()` para filtrar por organización, `warehouseScope()` (`null` = todos los almacenes del owner) o `canAccessWarehouse(id)` para el alcance del trabajador, y `currentUsername()` para `createdBy`, `performedBy` y `resolvedBy`. Nunca uses un `companyId`, `warehouseId` o usuario enviado por el cliente sin verificarlo.
 - **Eventos de dominio:** registra eventos en tu agregado con `registerEvent(...)`. En tu `CommandServiceImpl` sácalos con `pullDomainEvents()` antes de guardar y publícalos con `ApplicationEventPublisher` después de guardar, como en `UserCommandServiceImpl`.
 - **Rutas públicas ya configuradas:** `GET /api/v1/subscription-plans/**` (Liz) y `POST /api/v1/physical-events` (Kelber, protegido con su filtro de API key de dispositivo).
+
+## Multiempresa, roles y permisos
+
+- Cada **organización** (`organizations.id = company_id`) es un tenant aislado. El registro público (`sign-up`) siempre crea una organización nueva y a su propietario (`ROLE_OWNER`).
+- El propietario crea directamente las cuentas de sus trabajadores (`ROLE_SUPERVISOR` o `ROLE_OPERATOR`), que quedan activas de inmediato, con uno o más almacenes asignados (`user_warehouses`).
+- Los permisos efectivos son los del rol más las excepciones por usuario (`user_permissions`). Los permisos administrativos (almacenes, IoT, equipo, suscripción, configuración) son exclusivos del propietario y no se pueden conceder.
+- El JWT solo contiene `userId`, `companyId` y `tokenVersion`. Rol, permisos, estado y almacenes se leen de la base en cada petición, de modo que suspender a alguien o quitarle un permiso o un almacén tiene efecto inmediato.
+- Recurso de otra organización → `404`; operación sin permiso → `403`.
+
+### Base de datos en FreeDB (phpMyAdmin)
+
+El esquema de producción **no** lo modifica Hibernate (`ddl-auto=validate` en el perfil `prod`). Antes de desplegar esta versión:
+
+1. Exporta un respaldo completo desde phpMyAdmin.
+2. Selecciona la base de FreeDB e importa `database/multitenant_rbac.sql`. Es aditivo, se puede reimportar y no borra ni sobrescribe datos.
+3. Revisa los resultados de las consultas de verificación del final del script.
 
 ## Endpoints de IAM
 
 | Método | Ruta | Acceso |
 | --- | --- | --- |
 | POST | `/api/v1/authentication/sign-in` | Público |
-| POST | `/api/v1/authentication/sign-up` | Público |
-| GET | `/api/v1/users` | Usuario con sesión |
-| GET | `/api/v1/users/{id}` | Usuario con sesión |
-| POST | `/api/v1/users` | ROLE_ADMINISTRATOR |
-| PATCH | `/api/v1/users/{id}` | ROLE_ADMINISTRATOR |
-| DELETE | `/api/v1/users/{id}` | ROLE_ADMINISTRATOR |
+| POST | `/api/v1/authentication/sign-up` | Público: crea organización + propietario |
+| GET | `/api/v1/authentication/me` | Usuario con sesión |
+| GET | `/api/v1/users` · `/api/v1/users/{id}` | `users.view` (solo mi organización) |
+| POST | `/api/v1/users` | `users.create` |
+| PATCH | `/api/v1/users/{id}` | `users.update` (perfil, rol, almacenes) |
+| PUT | `/api/v1/users/{id}/permissions` | `users.update` |
+| POST | `/api/v1/users/{id}/suspend` · `/reactivate` | `users.suspend` |
+| DELETE | `/api/v1/users/{id}` | `users.update` |
+| GET | `/api/v1/permissions` | `users.view` |
+| GET · PATCH | `/api/v1/organizations/current` | `settings.view` · `settings.manage` |
 
 Los errores se devuelven como `ProblemDetail` (RFC 9457) con el mensaje en inglés o español según el header `Accept-Language`.
 
 ## Endpoints de Warehouse Management e IoT Integration
 
-Todos los recursos de gestión requieren un JWT Bearer emitido por `POST /api/v1/authentication/sign-in`. Los registros se aíslan por `companyId` obtenido de la sesión autenticada; el cliente no puede elegir otra empresa enviando un identificador en el body. Las lecturas de `ROLE_WAREHOUSE_KEEPER` se limitan al `warehouseId` de su sesión. El `SessionUser` actual no contiene una lista de zonas asignadas; el control exacto por zona requiere una ampliación coordinada del contexto IAM.
+Todos los recursos de gestión requieren un JWT Bearer emitido por `POST /api/v1/authentication/sign-in`. Los registros se aíslan por `companyId` obtenido de la sesión autenticada; el cliente no puede elegir otra empresa enviando un identificador en el body. Los trabajadores solo leen los almacenes, zonas y sensores de los almacenes que tienen asignados; crear, editar o eliminar almacenes, zonas y dispositivos IoT es exclusivo del propietario. El control por zona individual no está implementado (el alcance es por almacén).
 
 | Método | Ruta | Descripción | Acceso |
 | --- | --- | --- | --- |
-| GET | `/api/v1/warehouses` | Listar almacenes de la empresa | ADMINISTRATOR, SECURITY_MANAGER, WAREHOUSE_KEEPER, AUDITOR |
-| GET | `/api/v1/warehouses/{id}` | Consultar un almacén | Roles de lectura |
-| POST | `/api/v1/warehouses` | Registrar un almacén | ADMINISTRATOR, SECURITY_MANAGER |
-| PUT | `/api/v1/warehouses/{id}` | Actualizar un almacén | ADMINISTRATOR, SECURITY_MANAGER |
-| DELETE | `/api/v1/warehouses/{id}` | Eliminar un almacén vacío | ADMINISTRATOR |
-| GET | `/api/v1/warehouse-zones` | Listar zonas de la empresa | Roles de lectura |
-| GET | `/api/v1/warehouse-zones/{id}` | Consultar una zona | Roles de lectura |
-| POST | `/api/v1/warehouse-zones` | Crear zona y configurar turno/riesgo | ADMINISTRATOR, SECURITY_MANAGER |
-| PUT | `/api/v1/warehouse-zones/{id}` | Actualizar zona y turno | ADMINISTRATOR, SECURITY_MANAGER |
-| DELETE | `/api/v1/warehouse-zones/{id}` | Eliminar zona | ADMINISTRATOR |
-| GET | `/api/v1/sensor-nodes` | Listar sensores y estado de conexión | Roles de lectura |
-| GET | `/api/v1/sensor-nodes/{id}` | Consultar un sensor | Roles de lectura |
-| POST | `/api/v1/sensor-nodes` | Registrar/vincular sensor por MAC y zona | ADMINISTRATOR, SECURITY_MANAGER |
-| PUT | `/api/v1/sensor-nodes/{id}` | Actualizar zona/MAC/modelo/tipo | ADMINISTRATOR, SECURITY_MANAGER |
-| DELETE | `/api/v1/sensor-nodes/{id}` | Eliminar sensor sin eventos físicos | ADMINISTRATOR |
+| GET | `/api/v1/warehouses` | Listar almacenes (owner: todos; trabajador: asignados) | `warehouses.view` |
+| GET | `/api/v1/warehouses/{id}` | Consultar un almacén | `warehouses.view` |
+| POST | `/api/v1/warehouses` | Registrar un almacén | `warehouses.create` (owner) |
+| PUT | `/api/v1/warehouses/{id}` | Actualizar un almacén | `warehouses.update` (owner) |
+| DELETE | `/api/v1/warehouses/{id}` | Eliminar un almacén vacío | `warehouses.delete` (owner) |
+| GET | `/api/v1/warehouse-zones` | Listar zonas de los almacenes visibles | `warehouses.view` |
+| GET | `/api/v1/warehouse-zones/{id}` | Consultar una zona | `warehouses.view` |
+| POST | `/api/v1/warehouse-zones` | Crear zona y configurar turno/riesgo | `warehouses.update` (owner) |
+| PUT | `/api/v1/warehouse-zones/{id}` | Actualizar zona y turno | `warehouses.update` (owner) |
+| DELETE | `/api/v1/warehouse-zones/{id}` | Eliminar zona | `warehouses.update` (owner) |
+| GET | `/api/v1/sensor-nodes` | Listar sensores y estado de conexión | `iot.devices.view` |
+| GET | `/api/v1/sensor-nodes/{id}` | Consultar un sensor | `iot.devices.view` |
+| POST | `/api/v1/sensor-nodes` | Registrar/vincular sensor por MAC y zona | `iot.devices.manage` (owner) |
+| PUT | `/api/v1/sensor-nodes/{id}` | Actualizar zona/MAC/modelo/tipo | `iot.devices.manage` (owner) |
+| DELETE | `/api/v1/sensor-nodes/{id}` | Eliminar sensor sin eventos físicos | `iot.devices.manage` (owner) |
 | POST | `/api/v1/physical-events` | Recibir payload de ESP32 y registrar evento | API Key de dispositivo |
 
 Las respuestas de almacenes, zonas y sensores mantienen los nombres de propiedades consumidos por el frontend Angular (`companyId`, `warehouseId`, `zoneId`, `macAddress`, `connectionStatus`, `lastPingAt`, etc.).

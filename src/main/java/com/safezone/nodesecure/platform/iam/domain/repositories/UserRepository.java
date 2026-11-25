@@ -13,11 +13,14 @@ public interface UserRepository {
 
     Optional<User> findById(Long id);
 
+    /** Tenant-safe lookup: returns empty when the user belongs to another organization. */
+    Optional<User> findByIdAndCompanyId(Long id, Long companyId);
+
     Optional<User> findByUsername(Username username);
 
     Optional<User> findByEmail(EmailAddress email);
 
-    List<User> findAll();
+    List<User> findAllByCompanyId(Long companyId);
 
     boolean existsById(Long id);
 

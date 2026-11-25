@@ -1,7 +1,8 @@
 package com.safezone.nodesecure.platform.inventory.application.commandservices;
 
 public sealed interface StockMovementCommandFailure
-        permits StockMovementCommandFailure.ProductNotFound, StockMovementCommandFailure.InsufficientStock {
+        permits StockMovementCommandFailure.ProductNotFound, StockMovementCommandFailure.WarehouseNotFound,
+        StockMovementCommandFailure.InsufficientStock {
 
     String messageKey();
 
@@ -9,6 +10,7 @@ public sealed interface StockMovementCommandFailure
         return new Object[0];
     }
 
+    /** Also returned when the product belongs to another organization. */
     record ProductNotFound(Long productId) implements StockMovementCommandFailure {
         @Override
         public String messageKey() {
@@ -18,6 +20,19 @@ public sealed interface StockMovementCommandFailure
         @Override
         public Object[] messageArgs() {
             return new Object[]{productId};
+        }
+    }
+
+    /** The warehouse does not exist or belongs to another organization. */
+    record WarehouseNotFound(Long warehouseId) implements StockMovementCommandFailure {
+        @Override
+        public String messageKey() {
+            return "stock.error.warehouseNotFound";
+        }
+
+        @Override
+        public Object[] messageArgs() {
+            return new Object[]{warehouseId};
         }
     }
 

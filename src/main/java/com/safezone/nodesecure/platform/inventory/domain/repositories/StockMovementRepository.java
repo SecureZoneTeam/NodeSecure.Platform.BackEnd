@@ -12,5 +12,7 @@ public interface StockMovementRepository {
 
     Optional<StockMovement> findById(Long id);
 
-    List<StockMovement> findAll(Long productId, Long warehouseId, StockMovementType type);
+    /** Movements of one organization; {@code warehouseScope} null = every warehouse, empty = none. */
+    List<StockMovement> findAll(Long companyId, Long productId, Long warehouseId, StockMovementType type,
+                                java.util.Collection<Long> warehouseScope);
 }

@@ -24,15 +24,15 @@ public class WarehouseQueryServiceImpl implements WarehouseQueryService {
     @Transactional(readOnly = true)
     public List<Warehouse> handle(GetAllWarehousesQuery query) {
         return repository.findAllByCompanyId(query.companyId()).stream()
-                .filter(warehouse -> query.warehouseId() == null
-                        || warehouse.getId().equals(query.warehouseId()))
+                .filter(warehouse -> query.warehouseIds() == null
+                        || query.warehouseIds().contains(warehouse.getId()))
                 .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<Warehouse> handle(GetWarehouseByIdQuery query) {
-        if (query.warehouseId() != null && !query.warehouseId().equals(query.id())) {
+        if (query.warehouseIds() != null && !query.warehouseIds().contains(query.id())) {
             return Optional.empty();
         }
         return repository.findByIdAndCompanyId(query.id(), query.companyId());
@@ -42,8 +42,8 @@ public class WarehouseQueryServiceImpl implements WarehouseQueryService {
     @Transactional(readOnly = true)
     public List<WarehouseZone> handle(GetAllWarehouseZonesQuery query) {
         return repository.findAllByCompanyId(query.companyId()).stream()
-                .filter(warehouse -> query.warehouseId() == null
-                        || warehouse.getId().equals(query.warehouseId()))
+                .filter(warehouse -> query.warehouseIds() == null
+                        || query.warehouseIds().contains(warehouse.getId()))
                 .flatMap(warehouse -> warehouse.getZones().stream()).toList();
     }
 
@@ -51,8 +51,8 @@ public class WarehouseQueryServiceImpl implements WarehouseQueryService {
     @Transactional(readOnly = true)
     public Optional<WarehouseZone> handle(GetWarehouseZoneByIdQuery query) {
         return repository.findByZoneIdAndCompanyId(query.zoneId(), query.companyId())
-                .filter(warehouse -> query.warehouseId() == null
-                        || warehouse.getId().equals(query.warehouseId()))
+                .filter(warehouse -> query.warehouseIds() == null
+                        || query.warehouseIds().contains(warehouse.getId()))
                 .flatMap(warehouse -> warehouse.getZones().stream()
                         .filter(zone -> zone.getId().equals(query.zoneId())).findFirst());
     }

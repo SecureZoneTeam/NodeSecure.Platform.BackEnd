@@ -3,6 +3,7 @@ package com.safezone.nodesecure.platform.inventory.application.commands;
 import com.safezone.nodesecure.platform.inventory.domain.model.valueobjects.ProductCategory;
 import com.safezone.nodesecure.platform.inventory.domain.model.valueobjects.Sku;
 
+/** {@code companyId} and {@code createdBy} come from the authenticated session. */
 public record CreateProductCommand(Long companyId, String name, Sku sku, ProductCategory category,
                                    String unit, String createdBy) {
     public CreateProductCommand {
