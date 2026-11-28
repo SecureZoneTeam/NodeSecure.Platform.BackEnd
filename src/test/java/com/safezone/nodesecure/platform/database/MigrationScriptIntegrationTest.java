@@ -37,6 +37,8 @@ class MigrationScriptIntegrationTest {
 
     private static final String SCHEMA = "legacy_migration_it";
     private static final Path MIGRATION = Path.of("database", "multitenant_rbac.sql");
+    /** T25..T31: imported after multitenant_rbac.sql. */
+    private static final Path SAAS_MIGRATION = Path.of("database", "saas_traceability_reporting.sql");
 
     private JdbcTemplate jdbc;
     private DriverManagerDataSource dataSource;
@@ -57,6 +59,13 @@ class MigrationScriptIntegrationTest {
         populate(new ClassPathResource("db/freedb_legacy_schema.sql"));
         populate(new FileSystemResource(MIGRATION));
         populate(new FileSystemResource(MIGRATION)); // re-import must not change anything
+        // Rows created before T25..T31 must survive the second script untouched.
+        jdbc.update("INSERT INTO subscriptions (id, company_id, max_sensors, max_warehouses, plan_name, price, status) "
+                + "VALUES (50, 1, 10, 2, 'Legacy plan', 99.5, 'ACTIVE')");
+        jdbc.update("INSERT INTO incident_reports (id, company_id, description, event_type, status, timestamp, warehouse_name) "
+                + "VALUES (60, 1, 'Manual report', 'DISCREPANCY', 'OPEN', '2026-10-01 10:00:00', 'Central')");
+        populate(new FileSystemResource(SAAS_MIGRATION));
+        populate(new FileSystemResource(SAAS_MIGRATION)); // re-import must not change anything
     }
 
     private void populate(org.springframework.core.io.Resource script) {
@@ -127,6 +136,37 @@ class MigrationScriptIntegrationTest {
     }
 
     @Test
+    void seedsThePlanCatalogOnlyOnce() {
+        assertThat(jdbc.queryForList("SELECT CONCAT(code, ':', monthly_price, ':', warehouse_limit, ':', sensor_node_limit, ':', user_limit) "
+                + "FROM subscription_plans ORDER BY monthly_price", String.class))
+                .containsExactly("BASIC:49.00:1:5:3", "PREMIUM:129.00:5:30:15", "CORPORATE:349.00:25:200:100");
+    }
+
+    @Test
+    void keepsExistingSubscriptionsAndReportsUntouched() {
+        Map<String, Object> subscription = jdbc.queryForMap("SELECT plan_name, price, status, plan_id, started_at FROM subscriptions WHERE id = 50");
+        assertThat(subscription.get("plan_name")).isEqualTo("Legacy plan");
+        assertThat(subscription.get("price")).isEqualTo(99.5);
+        assertThat(subscription.get("status")).isEqualTo("ACTIVE");
+        assertThat(subscription.get("plan_id")).isNull();
+        assertThat(subscription.get("started_at")).isNull();
+        Map<String, Object> report = jdbc.queryForMap("SELECT description, source, warehouse_id FROM incident_reports WHERE id = 60");
+        assertThat(report.get("description")).isEqualTo("Manual report");
+        assertThat(report.get("source")).isNull();
+        assertThat(report.get("warehouse_id")).isNull();
+    }
+
+    @Test
+    void createsTheConstraintsThatPreventDuplicates() {
+        assertThat(jdbc.queryForList("SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS "
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_TYPE IN ('UNIQUE', 'FOREIGN KEY')", String.class))
+                .contains("uk_companies_tax_id", "uk_companies_company_id", "uk_subscription_plans_code",
+                        "uk_invoices_subscription_period", "uk_incident_reports_period", "fk_companies_organization",
+                        "fk_subscriptions_plan", "fk_invoices_subscription", "fk_invoices_plan",
+                        "fk_traceability_records_organization");
+    }
+
+    @Test
     void applicationStartsWithDdlValidateOnTheMigratedSchema() {
         // Command-line arguments have the highest precedence, so no profile can point elsewhere.
         try (ConfigurableApplicationContext context = new SpringApplicationBuilder(NodeSecurePlatformApplication.class)
@@ -149,6 +189,9 @@ class MigrationScriptIntegrationTest {
             User auditor = users.findById(4L).orElseThrow();
             assertThat(auditor.effectivePermissions()).doesNotContain(Permission.ENTRY_CREATE, Permission.EXIT_CREATE)
                     .contains(Permission.INVENTORY_VIEW);
+
+            assertThat(context.getBean(com.safezone.nodesecure.platform.subscriptions.domain.repositories.SubscriptionPlanRepository.class)
+                    .findAllByActiveTrueOrderByMonthlyPriceAsc()).hasSize(3);
 
             assertThat(users.findAllByCompanyId(2L)).extracting(user -> user.getUsername().value())
                     .containsExactly("other.keeper");

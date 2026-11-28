@@ -58,7 +58,7 @@ public final class StockMovement extends AbstractDomainAggregateRoot {
         }
         var movement = new StockMovement(null, companyId, productId, warehouseId, type, quantity, previousStock,
                 resultingStock, performedBy, now, normalizedJustification);
-        movement.registerEvent(new StockMovementRegisteredEvent(productId, warehouseId, type, quantity,
+        movement.registerEvent(new StockMovementRegisteredEvent(companyId, productId, warehouseId, type, quantity,
                 resultingStock, now));
         return movement;
     }

@@ -20,4 +20,7 @@ public interface WarehouseContextFacade {
 
     /** True only when every id exists and belongs to the company. */
     boolean allWarehousesBelongToCompany(Collection<Long> warehouseIds, Long companyId);
+
+    /** Name of a warehouse of the organization, empty when it does not exist there. */
+    Optional<String> findWarehouseName(Long warehouseId, Long companyId);
 }

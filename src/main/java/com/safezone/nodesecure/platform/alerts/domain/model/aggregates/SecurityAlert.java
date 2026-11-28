@@ -117,7 +117,7 @@ public final class SecurityAlert extends AbstractDomainAggregateRoot {
         this.justification = normalizedJustification;
         this.resolvedBy = person;
         this.resolvedAt = Objects.requireNonNull(now);
-        registerEvent(new SecurityAlertResolvedEvent(id, physicalEventId, newStatus, person, now));
+        registerEvent(new SecurityAlertResolvedEvent(id, warehouseId, zoneId, physicalEventId, newStatus, person, now));
     }
 
     /** @return {@code true} while the alert has not been closed */

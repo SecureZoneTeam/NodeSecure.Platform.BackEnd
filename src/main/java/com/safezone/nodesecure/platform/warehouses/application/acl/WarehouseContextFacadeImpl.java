@@ -86,6 +86,13 @@ public class WarehouseContextFacadeImpl implements WarehouseContextFacade {
         return companyWarehouseIds.containsAll(warehouseIds);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> findWarehouseName(Long warehouseId, Long companyId) {
+        if (warehouseId == null || companyId == null) return Optional.empty();
+        return repository.findByIdAndCompanyId(warehouseId, companyId).map(Warehouse::getName);
+    }
+
     private WarehouseZoneConfiguration toConfiguration(Warehouse warehouse, WarehouseZone zone) {
         return new WarehouseZoneConfiguration(warehouse.getId(), zone.getId(), warehouse.getCompanyId(),
                 warehouse.getStatus(), zone.getRiskLevel(), zone.getOperatingShift().startText(),

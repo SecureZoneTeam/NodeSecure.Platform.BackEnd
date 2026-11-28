@@ -1,5 +1,7 @@
 package com.safezone.nodesecure.platform.shared.interfaces.rest;
 
+import com.safezone.nodesecure.platform.shared.domain.exceptions.BusinessRuleViolationException;
+import com.safezone.nodesecure.platform.shared.domain.exceptions.ResourceNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -48,6 +50,23 @@ public class GlobalExceptionHandler {
     ErrorResponse handleException(DataIntegrityViolationException exception, Locale locale) {
         String message = messageSource.getMessage("errors.conflict", null, "errors.conflict", locale);
         log.warn("Data integrity violation: {}", exception.getMostSpecificCause().getMessage());
+        return ErrorResponse.create(exception, HttpStatus.CONFLICT, message);
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    ErrorResponse handleException(ResourceNotFoundException exception, Locale locale) {
+        String message = messageSource.getMessage(exception.getMessage(), exception.getArguments(),
+                exception.getMessage(), locale);
+        return ErrorResponse.create(exception, HttpStatus.NOT_FOUND, message);
+    }
+
+    @ExceptionHandler(BusinessRuleViolationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    ErrorResponse handleException(BusinessRuleViolationException exception, Locale locale) {
+        String message = messageSource.getMessage(exception.getMessage(), exception.getArguments(),
+                exception.getMessage(), locale);
+        log.warn("Business rule violated: {}", message);
         return ErrorResponse.create(exception, HttpStatus.CONFLICT, message);
     }
 }

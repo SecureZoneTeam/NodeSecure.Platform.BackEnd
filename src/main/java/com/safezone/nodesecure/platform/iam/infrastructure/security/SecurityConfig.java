@@ -50,6 +50,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/physical-events").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/subscription-plans", "/api/v1/subscription-plans/*").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new JwtAuthFilter(tokenService, sessionUserResolver),
                         UsernamePasswordAuthenticationFilter.class);

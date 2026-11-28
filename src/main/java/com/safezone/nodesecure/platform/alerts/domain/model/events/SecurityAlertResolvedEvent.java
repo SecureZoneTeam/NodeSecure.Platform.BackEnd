@@ -16,6 +16,6 @@ import java.time.Instant;
  * @param resolvedBy      username of the person who closed the alert
  * @param occurredAt      instant the alert was closed
  */
-public record SecurityAlertResolvedEvent(Long alertId, Long physicalEventId, AlertStatus status,
+public record SecurityAlertResolvedEvent(Long alertId, Long warehouseId, Long zoneId, Long physicalEventId, AlertStatus status,
                                          String resolvedBy, Instant occurredAt) implements DomainEvent {
 }

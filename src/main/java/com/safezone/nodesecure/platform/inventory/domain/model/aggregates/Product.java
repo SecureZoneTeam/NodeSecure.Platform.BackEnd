@@ -45,7 +45,7 @@ public final class Product extends AbstractDomainAggregateRoot {
     public static Product create(Long companyId, String name, Sku sku, ProductCategory category,
                                  String unit, String createdBy, Instant now) {
         var product = new Product(null, companyId, name, sku, category, unit, 0, now, now, createdBy);
-        product.registerEvent(new ProductCreatedEvent(sku.value(), now));
+        product.registerEvent(new ProductCreatedEvent(companyId, sku.value(), now));
         return product;
     }
 

@@ -222,6 +222,11 @@ class UserCommandServiceImplTest {
         public boolean allWarehousesBelongToCompany(Collection<Long> ids, Long companyId) {
             return ids.stream().allMatch(id -> warehouseBelongsToCompany(id, companyId));
         }
+
+        @Override
+        public Optional<String> findWarehouseName(Long warehouseId, Long companyId) {
+            return Optional.empty();
+        }
     }
 
     private static final class FakeHasher implements PasswordHasher {

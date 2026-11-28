@@ -4,5 +4,5 @@ import com.safezone.nodesecure.platform.shared.domain.events.DomainEvent;
 
 import java.time.Instant;
 
-public record ProductCreatedEvent(String sku, Instant occurredAt) implements DomainEvent {
+public record ProductCreatedEvent(Long companyId, String sku, Instant occurredAt) implements DomainEvent {
 }

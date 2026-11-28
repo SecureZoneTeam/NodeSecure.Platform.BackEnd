@@ -76,6 +76,8 @@ class StockMovementCommandServiceImplTest {
             }
             public Set<Long> findWarehouseIdsByCompanyId(Long companyId) { return Set.of(); }
             public boolean allWarehousesBelongToCompany(Collection<Long> ids, Long companyId) { return false; }
+            @Override
+            public Optional<String> findWarehouseName(Long warehouseId, Long companyId) { return Optional.empty(); }
         };
         service = new StockMovementCommandServiceImpl(productRepository, movementRepository, warehouseFacade,
                 publishedEvents::add, Clock.fixed(NOW, ZoneOffset.UTC));

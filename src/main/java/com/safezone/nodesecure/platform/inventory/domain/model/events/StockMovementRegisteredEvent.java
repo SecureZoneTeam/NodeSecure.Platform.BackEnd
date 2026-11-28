@@ -5,7 +5,7 @@ import com.safezone.nodesecure.platform.shared.domain.events.DomainEvent;
 
 import java.time.Instant;
 
-public record StockMovementRegisteredEvent(Long productId, Long warehouseId, StockMovementType type,
+public record StockMovementRegisteredEvent(Long companyId, Long productId, Long warehouseId, StockMovementType type,
                                            int quantity, int resultingStock, Instant occurredAt)
         implements DomainEvent {
 }

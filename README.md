@@ -115,6 +115,7 @@ El esquema de producción **no** lo modifica Hibernate (`ddl-auto=validate` en e
 1. Exporta un respaldo completo desde phpMyAdmin.
 2. Selecciona la base de FreeDB e importa `database/multitenant_rbac.sql`. Es aditivo, se puede reimportar y no borra ni sobrescribe datos.
 3. Revisa los resultados de las consultas de verificación del final del script.
+4. Importa después `database/saas_traceability_reporting.sql` (T25–T31: empresas, planes, suscripciones, facturas, bitácora y reportes). También es aditivo y reimportable.
 
 ## Endpoints de IAM
 
@@ -178,6 +179,27 @@ La clave de dispositivo se configura mediante `SENSOR_API_KEY`. La API falla de 
 La comunicación entre los bounded contexts se realiza mediante fachadas ACL: `SensorContextFacade` permite a Warehouse Management comprobar que una zona no tenga sensores antes de eliminarla, mientras que `WarehouseContextFacade` permite a Sensor Integration validar la pertenencia de una zona a la empresa autenticada y consultar su configuración (riesgo y turno operativo).
 
 El estado del sensor comienza como `OFFLINE`. Cada evento normal recibido actualiza `lastPingAt` y lo marca `ONLINE`; `NODE_DISCONNECTED` lo marca `OFFLINE`. Al consultar los sensores, un último ping que supere `SENSOR_CONNECTION_TIMEOUT_SECONDS` (por defecto, 120 segundos) también se marca `OFFLINE`.
+
+## Endpoints de suscripción, facturación, trazabilidad y reportes (T25–T31)
+
+| TS | Método | Ruta | Permiso |
+| --- | --- | --- | --- |
+| T25 | POST | `/api/v1/companies` | `settings.manage` (RUC de 11 dígitos con dígito verificador SUNAT, único) |
+| T25 | GET | `/api/v1/companies`, `/api/v1/companies?taxId=`, `/api/v1/companies/{id}` | `settings.view` |
+| T26 | GET | `/api/v1/subscription-plans`, `/api/v1/subscription-plans/{id}` | Público |
+| T27 | POST | `/api/v1/subscriptions` (`planId`, `planCode` o `planName`) | `subscriptions.manage` |
+| T27 | PATCH | `/api/v1/subscriptions/{id}/plan` | `subscriptions.manage` |
+| T27 | POST | `/api/v1/subscriptions/{id}/cancellation` | `subscriptions.manage` |
+| T27 | GET | `/api/v1/subscriptions`, `/api/v1/subscriptions/current`, `/api/v1/subscriptions/{id}` | `subscriptions.view` |
+| T28 | GET | `/api/v1/invoices`, `/api/v1/invoices?subscriptionId=`, `/api/v1/invoices/{id}` | `subscriptions.view` |
+| T29/T30 | GET | `/api/v1/traceability-records?warehouseId=&recordType=&eventType=&from=&to=&page=&size=&direction=`, `/api/v1/traceability-records/{id}` | `traceability.view` |
+| T31 | POST | `/api/v1/reporting/incident-reports` (`warehouseId`, `year`, `month`) | `reports.create` |
+| T31 | GET | `/api/v1/reporting/{id}`, `/api/v1/reporting/{id}/export` (CSV) | `reports.view` |
+
+- Precio y límites siempre salen del catálogo: el cliente no puede fijarlos. Activar o cambiar de plan emite la factura del periodo en la misma transacción. No hay pasarela de pago: las facturas quedan en estado `ISSUED`.
+- Transiciones: `ACTIVE → ACTIVE` (cambio de plan) y `ACTIVE → CANCELLED` (final). Una sola suscripción activa por organización. No se permite un plan cuyos límites sean menores que el uso actual (almacenes, nodos, usuarios).
+- La bitácora se llena sola con los eventos de dominio de usuarios, sensores, inventario y alertas, en la misma transacción que la operación. No tiene endpoints de escritura, modificación ni borrado.
+- Un reporte por organización, almacén y mes (clave única). Si el mes seguía abierto al generarlo, se actualiza en lugar de duplicarse; un mes sin incidencias indica "Cero Incidentes Registrados".
 
 ## Despliegue
 

@@ -83,6 +83,11 @@ public class IamContextFacade {
         }
     }
 
+    /** Users of the organization (owner included), used to check plan limits. */
+    public long countUsers(Long companyId) {
+        return companyId == null ? 0 : repository.findAllByCompanyId(companyId).size();
+    }
+
     public boolean userExists(Long userId) {
         return userId != null && repository.existsById(userId);
     }

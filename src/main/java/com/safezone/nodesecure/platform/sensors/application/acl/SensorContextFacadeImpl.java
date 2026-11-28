@@ -19,4 +19,10 @@ public class SensorContextFacadeImpl implements SensorContextFacade {
     public boolean zoneHasRegisteredSensors(Long zoneId) {
         return zoneId != null && repository.existsByZoneId(zoneId);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countSensorNodes(Long companyId) {
+        return companyId == null ? 0 : repository.findAllByCompanyId(companyId).size();
+    }
 }
