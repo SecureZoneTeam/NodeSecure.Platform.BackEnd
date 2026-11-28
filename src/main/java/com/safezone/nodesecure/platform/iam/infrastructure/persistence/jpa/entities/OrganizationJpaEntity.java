@@ -9,7 +9,6 @@ import jakarta.persistence.Table;
 
 import java.time.Instant;
 
-/** Table {@code organizations}. Its id is the {@code company_id} used by every business table. */
 @Entity
 @Table(name = "organizations")
 public class OrganizationJpaEntity {

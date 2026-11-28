@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-/** Public sign-up: creates a new organization and its owner. There is no way to choose an existing organization. */
+
 @Schema(description = "Data used to register a new owner and its organization")
 public record SignUpResource(
         @Schema(example = "Juan Quispe Mamani")

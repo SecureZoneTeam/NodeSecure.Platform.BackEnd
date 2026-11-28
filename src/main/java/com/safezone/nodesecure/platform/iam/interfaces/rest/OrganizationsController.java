@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
-/** Only "current" is exposed: there is no way to address another organization by id. */
 @RestController
 @RequestMapping(value = "/api/v1/organizations", produces = APPLICATION_JSON_VALUE)
 @Tag(name = "Organizations", description = "Organization (tenant) of the signed-in user")

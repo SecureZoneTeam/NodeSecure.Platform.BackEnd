@@ -5,10 +5,6 @@ import com.safezone.nodesecure.platform.shared.domain.aggregates.AbstractDomainA
 import java.time.Instant;
 import java.util.Objects;
 
-/**
- * Tenant of the platform. Its id is the {@code company_id} stored in every business table.
- * An organization is only created by the public sign-up, together with its owner.
- */
 public final class Organization extends AbstractDomainAggregateRoot {
 
     public enum Status { ACTIVE, SUSPENDED }
