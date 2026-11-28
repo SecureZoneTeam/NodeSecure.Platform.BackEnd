@@ -26,7 +26,7 @@ public final class User extends AbstractDomainAggregateRoot {
     private static final int MAX_NAME_LENGTH = 120;
 
     private final Long id;
-    private final Username username;
+    private Username username;
     private EmailAddress email;
     private String fullName;
     private String passwordHash;
@@ -94,6 +94,19 @@ public final class User extends AbstractDomainAggregateRoot {
         if (newFullName != null) {
             this.fullName = checkFullName(newFullName);
         }
+        touch(now);
+    }
+
+    /** The user changes the name used to sign in. Uniqueness is checked by the application service. */
+    public void changeUsername(Username newUsername, Instant now) {
+        this.username = Objects.requireNonNull(newUsername);
+        touch(now);
+    }
+
+    /** Stores a new password hash and invalidates every token issued before. */
+    public void changePassword(String newPasswordHash, Instant now) {
+        this.passwordHash = Objects.requireNonNull(newPasswordHash);
+        this.tokenVersion++;
         touch(now);
     }
 

@@ -1,5 +1,6 @@
 package com.safezone.nodesecure.platform.warehouses.application.internal.commandservices;
 
+import com.safezone.nodesecure.platform.subscriptions.interfaces.acl.SubscriptionContextFacade;
 import com.safezone.nodesecure.platform.shared.application.result.Result;
 import com.safezone.nodesecure.platform.shared.domain.events.DomainEvent;
 import com.safezone.nodesecure.platform.warehouses.application.commands.*;
@@ -23,13 +24,16 @@ public class WarehouseCommandServiceImpl implements WarehouseCommandService {
     private final WarehouseRepository repository;
     private final ApplicationEventPublisher publisher;
     private final SensorContextFacade sensorFacade;
+    private final SubscriptionContextFacade subscriptionFacade;
     private final Clock clock;
 
     public WarehouseCommandServiceImpl(WarehouseRepository repository, ApplicationEventPublisher publisher,
-                                       SensorContextFacade sensorFacade, Clock clock) {
+                                       SensorContextFacade sensorFacade, SubscriptionContextFacade subscriptionFacade,
+                                       Clock clock) {
         this.repository = repository;
         this.publisher = publisher;
         this.sensorFacade = sensorFacade;
+        this.subscriptionFacade = subscriptionFacade;
         this.clock = clock;
     }
 
@@ -42,6 +46,7 @@ public class WarehouseCommandServiceImpl implements WarehouseCommandService {
         if (repository.existsByCompanyIdAndName(command.companyId(), command.name())) {
             return Result.failure(new WarehouseCommandFailure.Conflict("warehouse.error.nameTaken"));
         }
+        subscriptionFacade.requireWarehouseCapacity(command.companyId());
         Warehouse warehouse;
         try {
             warehouse = Warehouse.create(command.companyId(), command.name(), command.address(), clock.instant());

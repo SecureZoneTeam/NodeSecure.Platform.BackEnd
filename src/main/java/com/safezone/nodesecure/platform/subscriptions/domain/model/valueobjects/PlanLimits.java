@@ -12,12 +12,32 @@ public record PlanLimits(int warehouses, int sensorNodes, int users) {
         }
     }
 
-    /** Resources whose current usage does not fit in these limits, e.g. {@code "warehouses 3/1"}. */
-    public List<String> violationsFor(OrganizationUsage usage) {
-        List<String> violations = new ArrayList<>();
-        if (usage.warehouses() > warehouses) violations.add("warehouses " + usage.warehouses() + "/" + warehouses);
-        if (usage.sensorNodes() > sensorNodes) violations.add("sensorNodes " + usage.sensorNodes() + "/" + sensorNodes);
-        if (usage.users() > users) violations.add("users " + usage.users() + "/" + users);
+    public int of(PlanResource resource) {
+        return switch (resource) {
+            case WAREHOUSES -> warehouses;
+            case SENSOR_NODES -> sensorNodes;
+            case USERS -> users;
+        };
+    }
+
+    /** Resources whose current usage does not fit in these limits (usage greater than the limit). */
+    public List<LimitViolation> exceededBy(OrganizationUsage usage) {
+        List<LimitViolation> violations = new ArrayList<>();
+        for (PlanResource resource : PlanResource.values()) {
+            if (usage.of(resource) > of(resource)) {
+                violations.add(new LimitViolation(resource, usage.of(resource), of(resource)));
+            }
+        }
         return violations;
+    }
+
+    /** Same as {@link #exceededBy} as text, e.g. {@code "warehouses 3/1"}. */
+    public List<String> violationsFor(OrganizationUsage usage) {
+        return exceededBy(usage).stream().map(LimitViolation::toString).toList();
+    }
+
+    /** True when one more unit of the resource still fits in the limit. */
+    public boolean allowsOneMore(PlanResource resource, long used) {
+        return used < of(resource);
     }
 }

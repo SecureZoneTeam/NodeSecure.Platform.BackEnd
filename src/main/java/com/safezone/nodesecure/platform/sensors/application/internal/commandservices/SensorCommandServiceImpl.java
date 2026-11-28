@@ -1,5 +1,6 @@
 package com.safezone.nodesecure.platform.sensors.application.internal.commandservices;
 
+import com.safezone.nodesecure.platform.subscriptions.interfaces.acl.SubscriptionContextFacade;
 import com.safezone.nodesecure.platform.shared.application.result.Result;
 import com.safezone.nodesecure.platform.shared.domain.events.DomainEvent;
 import com.safezone.nodesecure.platform.sensors.application.commands.*;
@@ -28,13 +29,16 @@ public class SensorCommandServiceImpl implements SensorCommandService {
     private final PhysicalEventRepository eventRepository;
     private final WarehouseContextFacade warehouseFacade;
     private final ApplicationEventPublisher publisher;
+    private final SubscriptionContextFacade subscriptionFacade;
     private final Clock clock;
 
     public SensorCommandServiceImpl(SensorNodeRepository sensorRepository, PhysicalEventRepository eventRepository,
-                                    WarehouseContextFacade warehouseFacade, ApplicationEventPublisher publisher, Clock clock) {
+                                    WarehouseContextFacade warehouseFacade, ApplicationEventPublisher publisher,
+                                    SubscriptionContextFacade subscriptionFacade, Clock clock) {
         this.sensorRepository = sensorRepository;
         this.eventRepository = eventRepository;
         this.warehouseFacade = warehouseFacade;
+        this.subscriptionFacade = subscriptionFacade;
         this.publisher = publisher;
         this.clock = clock;
     }
@@ -51,6 +55,7 @@ public class SensorCommandServiceImpl implements SensorCommandService {
         if (sensorRepository.existsByMacAddress(mac)) {
             return Result.failure(new SensorCommandFailure.Conflict("sensor.error.macAddressTaken"));
         }
+        subscriptionFacade.requireSensorNodeCapacity(command.companyId());
         try {
             SensorNode node = SensorNode.create(command.companyId(), command.zoneId(), mac,
                     command.model(), command.sensorType(), clock.instant());

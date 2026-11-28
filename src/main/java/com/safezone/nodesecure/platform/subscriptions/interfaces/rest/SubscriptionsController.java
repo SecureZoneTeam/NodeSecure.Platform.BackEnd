@@ -7,6 +7,7 @@ import com.safezone.nodesecure.platform.subscriptions.application.internal.servi
 import com.safezone.nodesecure.platform.subscriptions.interfaces.rest.resources.SubscriptionResources.ChangePlanResource;
 import com.safezone.nodesecure.platform.subscriptions.interfaces.rest.resources.SubscriptionResources.CreateSubscriptionResource;
 import com.safezone.nodesecure.platform.subscriptions.interfaces.rest.resources.SubscriptionResources.SubscriptionResource;
+import com.safezone.nodesecure.platform.subscriptions.interfaces.rest.resources.SubscriptionResources.SubscriptionUsageResource;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -57,6 +58,17 @@ public class SubscriptionsController {
     public ResponseEntity<SubscriptionResource> getCurrent() {
         return subscriptionService.findActive(iamFacade.requireCompanyId())
                 .map(subscription -> ResponseEntity.ok(SubscriptionResource.from(subscription)))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @Operation(summary = "Usage of my organization against the limits of its active subscription",
+            description = "Warehouses, sensor nodes and users used and contracted. A null limit means not limited.")
+    @ApiResponse(responseCode = "404", description = "The organization has no active subscription")
+    @PreAuthorize("hasAuthority('subscriptions.view')")
+    @GetMapping("/current/usage")
+    public ResponseEntity<SubscriptionUsageResource> getCurrentUsage() {
+        return subscriptionService.usage(iamFacade.requireCompanyId())
+                .map(report -> ResponseEntity.ok(SubscriptionUsageResource.from(report)))
                 .orElse(ResponseEntity.notFound().build());
     }
 

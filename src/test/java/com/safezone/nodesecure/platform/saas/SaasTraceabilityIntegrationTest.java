@@ -82,7 +82,7 @@ class SaasTraceabilityIntegrationTest {
 
     @Test
     void companiesAreRegisteredWithAValidUniqueRucAndStayInsideTheirOrganization() throws Exception {
-        Session a = signUp("compa" + suffix);
+        Session a = subscribed(signUp("compa" + suffix));
         Session b = signUp("compb" + suffix);
         String ruc = validRuc();
 
@@ -238,8 +238,8 @@ class SaasTraceabilityIntegrationTest {
 
     @Test
     void domainEventsAreRecordedImmutablyAndCanBeFilteredAndPaged() throws Exception {
-        Session a = signUp("tra" + suffix);
-        Session b = signUp("trb" + suffix);
+        Session a = subscribed(signUp("tra" + suffix));
+        Session b = subscribed(signUp("trb" + suffix));
         long w1 = createWarehouse(a, "W1");
         long w2 = createWarehouse(a, "W2");
         long wb = createWarehouse(b, "WB");
@@ -329,8 +329,8 @@ class SaasTraceabilityIntegrationTest {
 
     @Test
     void monthlyIncidentReportIsDerivedFromTheLogWithoutDuplicates() throws Exception {
-        Session a = signUp("rpa" + suffix);
-        Session b = signUp("rpb" + suffix);
+        Session a = subscribed(signUp("rpa" + suffix));
+        Session b = subscribed(signUp("rpb" + suffix));
         long w1 = createWarehouse(a, "W1");
         long w2 = createWarehouse(a, "W2");
         long product = createProduct(a, "SKU-R-" + suffix.toUpperCase());
@@ -424,6 +424,12 @@ class SaasTraceabilityIntegrationTest {
         assertThat(result.getResponse().getStatus()).as(result.getResponse().getContentAsString()).isEqualTo(201);
         JsonNode node = body(result);
         return new Session(node.get("token").asText(), node.get("id").asLong(), node.get("organizationId").asLong());
+    }
+
+    /** Warehouses, sensors and users can only be created with an active subscription. */
+    private Session subscribed(Session owner) throws Exception {
+        call(post("/api/v1/subscriptions").content("{\"planCode\":\"PREMIUM\"}"), owner, 201);
+        return owner;
     }
 
     private Session signIn(String username) throws Exception {

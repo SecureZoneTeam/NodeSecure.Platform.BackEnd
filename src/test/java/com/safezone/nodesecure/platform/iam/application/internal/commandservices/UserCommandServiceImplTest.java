@@ -1,6 +1,8 @@
 package com.safezone.nodesecure.platform.iam.application.internal.commandservices;
 
+import com.safezone.nodesecure.platform.iam.application.commands.ChangeOwnPasswordCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.ChangeUserStatusCommand;
+import com.safezone.nodesecure.platform.iam.application.commands.UpdateOwnProfileCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.CreateUserCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.DeleteUserCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.SignInCommand;
@@ -22,6 +24,8 @@ import com.safezone.nodesecure.platform.iam.domain.repositories.UserRepository;
 import com.safezone.nodesecure.platform.iam.domain.services.PasswordHasher;
 import com.safezone.nodesecure.platform.iam.domain.services.TokenService;
 import com.safezone.nodesecure.platform.shared.application.result.Result;
+import com.safezone.nodesecure.platform.shared.domain.exceptions.BusinessRuleViolationException;
+import com.safezone.nodesecure.platform.subscriptions.interfaces.acl.SubscriptionContextFacade;
 import com.safezone.nodesecure.platform.warehouses.interfaces.acl.WarehouseContextFacade;
 import com.safezone.nodesecure.platform.warehouses.interfaces.acl.WarehouseZoneConfiguration;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,15 +47,18 @@ class UserCommandServiceImplTest {
     /** warehouseId -> companyId */
     private final Map<Long, Long> warehouses = new HashMap<>();
 
+    private final FakeSubscriptionFacade subscriptions = new FakeSubscriptionFacade();
+
     @BeforeEach
     void setUp() {
+        subscriptions.userLimitReached = false;
         repository = new FakeUserRepository();
         organizations = new FakeOrganizationRepository();
         publishedEvents = new ArrayList<>();
         warehouses.clear();
         Clock clock = Clock.fixed(Instant.parse("2026-11-11T10:00:00Z"), ZoneOffset.UTC);
         service = new UserCommandServiceImpl(repository, organizations, new FakeHasher(), new FakeTokenService(),
-                new FakeWarehouseFacade(), publishedEvents::add, clock);
+                new FakeWarehouseFacade(), publishedEvents::add, subscriptions, clock);
     }
 
     private SignInResult signUp(String username, String organizationName) {
@@ -208,6 +215,69 @@ class UserCommandServiceImplTest {
 
         assertEquals(versionBefore + 1, suspended.getTokenVersion());
         assertFalse(suspended.isActive());
+    }
+
+    @Test
+    void workerCreationIsRejectedWhenThePlanUserLimitIsReached() {
+        SignInResult owner = signUp("ownera", "Organización A");
+        warehouses.put(10L, owner.user().getCompanyId());
+        subscriptions.userLimitReached = true;
+
+        assertThrows(BusinessRuleViolationException.class, () -> createWorker(owner, "pepito", List.of(10L)));
+        assertEquals(1, repository.findAllByCompanyId(owner.user().getCompanyId()).size());
+    }
+
+    @Test
+    void userEditsOwnProfileWithUniqueEmailAndUsername() {
+        SignInResult owner = signUp("ownera", "Organización A");
+        signUp("ownerb", "Organización B");
+        Long companyId = owner.user().getCompanyId();
+        Long id = owner.user().getId();
+
+        Result<User, UserCommandFailure> taken = service.handle(new UpdateOwnProfileCommand(id, companyId, null, null, "ownerb"));
+        assertInstanceOf(UserCommandFailure.UsernameTaken.class, taken.failure().orElseThrow());
+        Result<User, UserCommandFailure> emailTaken = service.handle(
+                new UpdateOwnProfileCommand(id, companyId, null, "ownerb@mail.pe", null));
+        assertInstanceOf(UserCommandFailure.EmailTaken.class, emailTaken.failure().orElseThrow());
+
+        User updated = service.handle(new UpdateOwnProfileCommand(id, companyId, "Juan Quispe", "juan@mail.pe", "jquispe"))
+                .success().orElseThrow();
+        assertEquals("Juan Quispe", updated.getFullName());
+        assertEquals("juan@mail.pe", updated.getEmail().value());
+        assertEquals("jquispe", updated.getUsername().value());
+        assertTrue(service.handle(new SignInCommand("jquispe", "secret123")).success().isPresent());
+    }
+
+    @Test
+    void passwordChangeRequiresTheCurrentPasswordAndRevokesOldTokens() {
+        SignInResult owner = signUp("ownera", "Organización A");
+        Long companyId = owner.user().getCompanyId();
+        Long id = owner.user().getId();
+        long versionBefore = owner.user().getTokenVersion();
+
+        Result<SignInResult, UserCommandFailure> wrong = service.handle(
+                new ChangeOwnPasswordCommand(id, companyId, "not-my-password", "newSecret456"));
+        assertInstanceOf(UserCommandFailure.Validation.class, wrong.failure().orElseThrow());
+
+        SignInResult changed = service.handle(new ChangeOwnPasswordCommand(id, companyId, "secret123", "newSecret456"))
+                .success().orElseThrow();
+        assertEquals("hashed:newSecret456", changed.user().getPasswordHash());
+        assertEquals(versionBefore + 1, changed.user().getTokenVersion());
+        assertNotNull(changed.token());
+        assertTrue(service.handle(new SignInCommand("ownera", "secret123")).failure().isPresent());
+        assertTrue(service.handle(new SignInCommand("ownera", "newSecret456")).success().isPresent());
+    }
+
+    private static final class FakeSubscriptionFacade implements SubscriptionContextFacade {
+        boolean userLimitReached;
+
+        public void requireWarehouseCapacity(Long companyId) { }
+        public void requireSensorNodeCapacity(Long companyId) { }
+        public void requireUserCapacity(Long companyId) {
+            if (userLimitReached) {
+                throw new BusinessRuleViolationException("subscriptions.error.limitReached.users");
+            }
+        }
     }
 
     private final class FakeWarehouseFacade implements WarehouseContextFacade {

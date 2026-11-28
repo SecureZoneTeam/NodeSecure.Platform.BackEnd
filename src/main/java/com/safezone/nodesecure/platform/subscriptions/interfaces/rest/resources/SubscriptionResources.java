@@ -1,5 +1,7 @@
 package com.safezone.nodesecure.platform.subscriptions.interfaces.rest.resources;
 
+import com.safezone.nodesecure.platform.subscriptions.application.internal.services.SubscriptionService;
+import com.safezone.nodesecure.platform.subscriptions.domain.model.valueobjects.PlanResource;
 import com.safezone.nodesecure.platform.subscriptions.domain.model.aggregates.Company;
 import com.safezone.nodesecure.platform.subscriptions.domain.model.aggregates.Invoice;
 import com.safezone.nodesecure.platform.subscriptions.domain.model.aggregates.Subscription;
@@ -13,6 +15,8 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 
 /** Request and response resources of the Companies, Plans, Subscriptions and Invoices endpoints. */
 public final class SubscriptionResources {
@@ -77,6 +81,28 @@ public final class SubscriptionResources {
                     subscription.getMaxWarehouses(), subscription.getMaxSensors(), subscription.getStatus(),
                     subscription.getStartedAt(), subscription.getRenewsAt(), subscription.getCancelledAt(),
                     invoice == null ? null : invoice.getId());
+        }
+    }
+
+    public record ResourceUsage(String resource, long used, Integer limit) {
+    }
+
+    @Schema(description = "Active subscription of my organization with the usage of each limited resource")
+    public record SubscriptionUsageResource(Long subscriptionId, String planCode, String planName, Double price,
+                                            String currency, String status, Instant startedAt, Instant renewsAt,
+                                            List<ResourceUsage> resources) {
+        public static SubscriptionUsageResource from(SubscriptionService.UsageReport report) {
+            Subscription subscription = report.subscription();
+            List<ResourceUsage> resources = Arrays.stream(PlanResource.values())
+                    .map(resource -> {
+                        int limit = report.limits().of(resource);
+                        return new ResourceUsage(resource.key(), report.usage().of(resource),
+                                limit == Integer.MAX_VALUE ? null : limit);
+                    })
+                    .toList();
+            return new SubscriptionUsageResource(subscription.getId(), report.planCode(), subscription.getPlanName(),
+                    subscription.getPrice(), subscription.getCurrency(), subscription.getStatus(),
+                    subscription.getStartedAt(), subscription.getRenewsAt(), resources);
         }
     }
 

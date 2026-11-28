@@ -8,8 +8,13 @@ import com.safezone.nodesecure.platform.subscriptions.application.internal.servi
 import com.safezone.nodesecure.platform.subscriptions.domain.model.aggregates.Invoice;
 import com.safezone.nodesecure.platform.subscriptions.domain.model.aggregates.Subscription;
 import com.safezone.nodesecure.platform.subscriptions.domain.model.aggregates.SubscriptionPlan;
+import com.safezone.nodesecure.platform.subscriptions.domain.exceptions.PlanLimitExceededException;
+import com.safezone.nodesecure.platform.subscriptions.domain.exceptions.SubscriptionRequiredException;
 import com.safezone.nodesecure.platform.subscriptions.domain.model.valueobjects.InvoiceConcept;
+import com.safezone.nodesecure.platform.subscriptions.domain.model.valueobjects.LimitViolation;
 import com.safezone.nodesecure.platform.subscriptions.domain.model.valueobjects.OrganizationUsage;
+import com.safezone.nodesecure.platform.subscriptions.domain.model.valueobjects.PlanLimits;
+import com.safezone.nodesecure.platform.subscriptions.domain.model.valueobjects.PlanResource;
 import com.safezone.nodesecure.platform.subscriptions.domain.model.valueobjects.SubscriptionStatus;
 import com.safezone.nodesecure.platform.subscriptions.domain.repositories.InvoiceRepository;
 import com.safezone.nodesecure.platform.subscriptions.domain.repositories.SubscriptionRepository;
@@ -104,15 +109,63 @@ public class SubscriptionService {
         return subscriptions.findFirstByCompanyIdAndStatusOrderByIdDesc(companyId, ACTIVE);
     }
 
+    /** Usage of the organization compared with the limits of its active subscription. */
+    public record UsageReport(Subscription subscription, String planCode, OrganizationUsage usage, PlanLimits limits) {
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<UsageReport> usage(Long companyId) {
+        return findActive(companyId).map(active -> {
+            Optional<SubscriptionPlan> plan = plans.findContracted(active.getPlanId(), active.getPlanName());
+            return new UsageReport(active, plan.map(SubscriptionPlan::getCode).orElse(null),
+                    currentUsage(companyId), contractedLimits(active, plan));
+        });
+    }
+
+    /**
+     * Rejects the creation of one more resource when the organization has no active subscription
+     * or already uses everything its plan allows. Must run inside the creating transaction: the
+     * organization row stays locked until it ends, so concurrent creations are serialized.
+     */
+    @Transactional
+    public void requireCapacity(Long companyId, PlanResource resource) {
+        subscriptions.lockOrganization(companyId);
+        Subscription active = findActive(companyId).orElseThrow(() -> new SubscriptionRequiredException(resource));
+        Optional<SubscriptionPlan> plan = plans.findContracted(active.getPlanId(), active.getPlanName());
+        PlanLimits limits = contractedLimits(active, plan);
+        long used = count(companyId, resource);
+        if (!limits.allowsOneMore(resource, used)) {
+            throw PlanLimitExceededException.limitReached(plan.map(SubscriptionPlan::getCode).orElse(null),
+                    active.getPlanName(), new LimitViolation(resource, used, limits.of(resource)));
+        }
+    }
+
+    /**
+     * Limits the organization paid for: warehouses and sensors come from the subscription snapshot;
+     * the user limit from its catalog plan (subscriptions created before the catalog have no user limit).
+     */
+    private static PlanLimits contractedLimits(Subscription subscription, Optional<SubscriptionPlan> plan) {
+        int users = plan.map(SubscriptionPlan::getUserLimit).orElse(Integer.MAX_VALUE);
+        return new PlanLimits(subscription.getMaxWarehouses(), subscription.getMaxSensors(), users);
+    }
+
+    private OrganizationUsage currentUsage(Long companyId) {
+        return new OrganizationUsage(count(companyId, PlanResource.WAREHOUSES),
+                count(companyId, PlanResource.SENSOR_NODES), count(companyId, PlanResource.USERS));
+    }
+
+    private long count(Long companyId, PlanResource resource) {
+        return switch (resource) {
+            case WAREHOUSES -> warehouseFacade.findWarehouseIdsByCompanyId(companyId).size();
+            case SENSOR_NODES -> sensorFacade.countSensorNodes(companyId);
+            case USERS -> iamFacade.countUsers(companyId);
+        };
+    }
+
     private void requireUsageFits(Long companyId, SubscriptionPlan plan) {
-        OrganizationUsage usage = new OrganizationUsage(
-                warehouseFacade.findWarehouseIdsByCompanyId(companyId).size(),
-                sensorFacade.countSensorNodes(companyId),
-                iamFacade.countUsers(companyId));
-        List<String> violations = plan.limits().violationsFor(usage);
+        List<LimitViolation> violations = plan.limits().exceededBy(currentUsage(companyId));
         if (!violations.isEmpty()) {
-            throw new BusinessRuleViolationException("subscriptions.error.limitsExceeded", plan.getName(),
-                    String.join(", ", violations));
+            throw PlanLimitExceededException.usageExceedsPlan(plan.getCode(), plan.getName(), violations);
         }
     }
 

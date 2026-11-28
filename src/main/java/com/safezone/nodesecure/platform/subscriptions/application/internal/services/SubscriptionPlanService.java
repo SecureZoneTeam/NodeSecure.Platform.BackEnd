@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 /** T26: read-only catalog of SaaS plans. */
 @Service
@@ -38,6 +39,20 @@ public class SubscriptionPlanService {
     public SubscriptionPlan getById(Long id) {
         return repository.findByIdAndActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException("plans.error.notFound", id));
+    }
+
+    /**
+     * Catalog plan a subscription was contracted with, even if the plan was later retired.
+     * Subscriptions created before the catalog have no plan id and are matched by name.
+     */
+    @Transactional(readOnly = true)
+    public Optional<SubscriptionPlan> findContracted(Long planId, String planName) {
+        if (planId != null) {
+            return repository.findById(planId);
+        }
+        return planName == null || planName.isBlank()
+                ? Optional.empty()
+                : repository.findByNameIgnoreCaseAndActiveTrue(planName.trim());
     }
 
     @Transactional(readOnly = true)

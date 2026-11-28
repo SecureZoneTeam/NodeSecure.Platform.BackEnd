@@ -74,6 +74,9 @@ class MultiTenantSecurityIntegrationTest {
     private World world() throws Exception {
         Session ownerA = signUp("ownera" + suffix, "Organización A " + suffix);
         Session ownerB = signUp("ownerb" + suffix, "Organización B " + suffix);
+        // Warehouses, sensors and users can only be created with an active subscription.
+        call(post("/api/v1/subscriptions").content("{\"planCode\":\"PREMIUM\"}"), ownerA, 201);
+        call(post("/api/v1/subscriptions").content("{\"planCode\":\"PREMIUM\"}"), ownerB, 201);
         long w1 = createWarehouse(ownerA, "Warehouse 1");
         long w2 = createWarehouse(ownerA, "Warehouse 2");
         long w3 = createWarehouse(ownerB, "Warehouse 3");
@@ -125,7 +128,9 @@ class MultiTenantSecurityIntegrationTest {
         assertThat(body(call(get("/api/v1/stock-movements?warehouseId=" + world.w1()), b, 200))).isEmpty();
         assertThat(body(call(get("/api/v1/sensor-nodes"), b, 200))).isEmpty();
         assertThat(body(call(get("/api/v1/security-alerts?warehouseId=" + world.w1()), b, 200))).isEmpty();
-        assertThat(body(call(get("/api/v1/subscriptions"), b, 200))).isEmpty();
+        JsonNode subscriptionsOfB = body(call(get("/api/v1/subscriptions"), b, 200));
+        assertThat(subscriptionsOfB).hasSize(1);
+        assertThat(subscriptionsOfB.get(0).get("companyId").asLong()).isEqualTo(b.organizationId());
         assertThat(body(call(get("/api/v1/organizations/current"), b, 200)).get("id").asLong())
                 .isEqualTo(b.organizationId());
     }

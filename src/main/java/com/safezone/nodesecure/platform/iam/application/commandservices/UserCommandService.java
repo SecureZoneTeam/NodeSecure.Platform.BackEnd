@@ -2,7 +2,9 @@ package com.safezone.nodesecure.platform.iam.application.commandservices;
 
 import com.safezone.nodesecure.platform.iam.application.commands.ChangeUserStatusCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.CreateUserCommand;
+import com.safezone.nodesecure.platform.iam.application.commands.ChangeOwnPasswordCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.DeleteUserCommand;
+import com.safezone.nodesecure.platform.iam.application.commands.UpdateOwnProfileCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.SignInCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.SignUpCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.UpdateUserCommand;
@@ -26,4 +28,10 @@ public interface UserCommandService {
     Result<User, UserCommandFailure> handle(ChangeUserStatusCommand command);
 
     Result<Long, UserCommandFailure> handle(DeleteUserCommand command);
+
+    /** The signed-in user edits its full name, email or username. */
+    Result<User, UserCommandFailure> handle(UpdateOwnProfileCommand command);
+
+    /** The signed-in user changes its password. Returns a new token: tokens issued before stop working. */
+    Result<SignInResult, UserCommandFailure> handle(ChangeOwnPasswordCommand command);
 }

@@ -1,7 +1,10 @@
 package com.safezone.nodesecure.platform.iam.application.internal.commandservices;
 
+import com.safezone.nodesecure.platform.subscriptions.interfaces.acl.SubscriptionContextFacade;
 import com.safezone.nodesecure.platform.iam.application.commands.ChangeUserStatusCommand;
+import com.safezone.nodesecure.platform.iam.application.commands.ChangeOwnPasswordCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.CreateUserCommand;
+import com.safezone.nodesecure.platform.iam.application.commands.UpdateOwnProfileCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.DeleteUserCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.SignInCommand;
 import com.safezone.nodesecure.platform.iam.application.commands.SignUpCommand;
@@ -51,12 +54,14 @@ public class UserCommandServiceImpl implements UserCommandService {
     private final TokenService tokenService;
     private final WarehouseContextFacade warehouseFacade;
     private final ApplicationEventPublisher publisher;
+    private final SubscriptionContextFacade subscriptionFacade;
     private final Clock clock;
 
     public UserCommandServiceImpl(UserRepository repository, OrganizationRepository organizationRepository,
                                   PasswordHasher hasher, TokenService tokenService,
                                   WarehouseContextFacade warehouseFacade, ApplicationEventPublisher publisher,
-                                  Clock clock) {
+                                  SubscriptionContextFacade subscriptionFacade, Clock clock) {
+        this.subscriptionFacade = subscriptionFacade;
         this.repository = repository;
         this.organizationRepository = organizationRepository;
         this.hasher = hasher;
@@ -132,6 +137,7 @@ public class UserCommandServiceImpl implements UserCommandService {
         if (repository.existsByEmail(email)) {
             return Result.failure(new UserCommandFailure.EmailTaken());
         }
+        subscriptionFacade.requireUserCapacity(command.companyId());
         User worker = User.createWorker(username, email, command.fullName(), hasher.hash(password.value()),
                 role, command.companyId(), warehouses.get(), clock.instant());
         return Result.success(persist(worker));
@@ -240,6 +246,51 @@ public class UserCommandServiceImpl implements UserCommandService {
     }
 
     /** The owner and the actor's own account cannot be suspended, deleted or have their permissions changed. */
+    @Override
+    @Transactional
+    public Result<User, UserCommandFailure> handle(UpdateOwnProfileCommand command) {
+        Optional<User> found = repository.findByIdAndCompanyId(command.userId(), command.companyId());
+        if (found.isEmpty()) {
+            return notFound(command.userId());
+        }
+        User user = found.get();
+        EmailAddress newEmail = isBlank(command.email()) ? null : new EmailAddress(command.email());
+        if (newEmail != null && !newEmail.equals(user.getEmail()) && repository.existsByEmail(newEmail)) {
+            return Result.failure(new UserCommandFailure.EmailTaken());
+        }
+        Username newUsername = isBlank(command.username()) ? null : new Username(command.username());
+        if (newUsername != null && !newUsername.equals(user.getUsername()) && repository.existsByUsername(newUsername)) {
+            return Result.failure(new UserCommandFailure.UsernameTaken());
+        }
+        Instant now = clock.instant();
+        user.updateProfile(newEmail, isBlank(command.fullName()) ? null : command.fullName(), now);
+        if (newUsername != null && !newUsername.equals(user.getUsername())) {
+            user.changeUsername(newUsername, now);
+        }
+        return Result.success(repository.save(user));
+    }
+
+    @Override
+    @Transactional
+    public Result<SignInResult, UserCommandFailure> handle(ChangeOwnPasswordCommand command) {
+        Optional<User> found = repository.findByIdAndCompanyId(command.userId(), command.companyId());
+        if (found.isEmpty()) {
+            return notFound(command.userId());
+        }
+        User user = found.get();
+        if (command.currentPassword() == null || !hasher.matches(command.currentPassword(), user.getPasswordHash())) {
+            return validation("iam.error.password.current");
+        }
+        Password password = new Password(command.newPassword());
+        user.changePassword(hasher.hash(password.value()), clock.instant());
+        User saved = repository.save(user);
+        Optional<Organization> organization = organizationRepository.findById(saved.getCompanyId());
+        if (organization.isEmpty()) {
+            return forbidden("iam.error.organization.unavailable");
+        }
+        return Result.success(new SignInResult(saved, organization.get(), tokenService.createToken(saved)));
+    }
+
     private Optional<UserCommandFailure> protectedTarget(User target, Long actorUserId) {
         if (target.isOwner()) {
             return Optional.of(new UserCommandFailure.Forbidden("iam.error.owner.immutable"));
